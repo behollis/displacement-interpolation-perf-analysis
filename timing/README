@@ -1,0 +1,6 @@
+The DisplacementInterpolation.cpp file is the toy example provided by the displacement interpolation paper site (http://www.cs.ubc.ca/nest/imager/tr/2011/DisplacementInterpolation/).  It has two sets of 50x50 data positions with weights and an additional 50x50 set of positions which will be used to determine the interpolated weights.
+
+Several timing features have been added to the code to determine the processing time of both the precomputation and interpolation of the algorithm.  The times are saved as entries in a timing record file every time the program runs.
+
+Currently, any timing done on non-Windows platforms will be single-threaded and take noticeably more time.  The Interpolator.h file will be rewritten with pthreads very soon.
+
