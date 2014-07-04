@@ -1,0 +1,4 @@
+usage: python plot_weights.py <data file>
+
+Given a data file from the saveFile function, this python program will use matplotlib to create a 3D graph of the weights assigned to each point.  The saveFile function can be found in the toy example from the displacement interpolation paper webpage.
+
