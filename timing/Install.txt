@@ -1,0 +1,12 @@
+To use the displacement interpolation code, you need :
+
+- to compile the graph library LEMON. You can find a recent version of LEMON at http://lemon.cs.elte.hu/trac/lemon
+Compiling LEMON can require to install CMake, but is overall fairly easy (no additional dependencies).
+- add the files full_bipartitegraph.h and network_simplex_simple.h in your lemon source directory
+- directly include nnls.c , nnls.h and Interpolator.h in your project
+
+An example program generating the disk-to-square toy example is provided in DisplacementInterpolation.cpp
+The code has been tested for Visual Studio 2008 32 bits and Visual Studio 2010 64 bits.
+
+
+-- Nicolas, 2011

@@ -1,0 +1,32 @@
+Interpolator.h , Sept 12th 2011
+generic class for Displacement Interpolation 
+author: Nicolas Bonneel
+Copyright 2011 Nicolas Bonneel, Michiel van de Panne, Sylvain Paris, Wolfgang Heidrich.
+All rights reserved. 
+Web: http://www.cs.ubc.ca/labs/imager/tr/2011/DisplacementInterpolation/
+
+The Interpolator is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+Note : This file, adapted from the original implementation, is intended to be easy to integrate to existing projects rather than to be "clean" or efficient. It is thus a single header file encompassing all the necessary classes, originally in multiple files. Many classes are present for the sole purpose of passing data to windows threads, which make the code even uglier. 
+For Linux users, multi-threading is not supported here.
+This code is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+See the GNU General Public License for more details.
+
+If you use this code for research purpose, please reference the following paper :
+
+Nicolas Bonneel, Michiel van de Panne, Sylvain Paris, Wolfgang Heidrich
+"Diplacement Interpolation using Lagrangian Mass Transport", 
+ACM Transactions on Graphics (Proceedings of SIGGRAPH ASIA 2011)
+
+
+// HISTORY:
+// 
+// 13/02/2012 : Fixed a bug when Nlevels==0. Bug not present in the submission.
+// Fixed the helper function Slerp, not actually used here (does not compile if used).
+// Fixed the Vector class when DIM==3 (does not compile if used)
+// changed abs to fabs, since the only prototype for GCC seems int abs(int)
+//
+// 12/09/2011 : Cleaned up the submission source code. Known bug : the 
+// provided example returns 0 when compiled with GCC
+//

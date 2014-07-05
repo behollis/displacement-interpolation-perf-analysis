@@ -2,5 +2,5 @@ The DisplacementInterpolation.cpp file is the toy example provided by the displa
 
 Several timing features have been added to the code to determine the processing time of both the precomputation and interpolation of the algorithm.  The times are saved as entries in a timing record file every time the program runs.
 
-Currently, any timing done on non-Windows platforms will be single-threaded and take noticeably more time.  The Interpolator.h file will be rewritten with pthreads very soon.
+The Interpolator.h file has been rewritten with pthreads to allow multithreading on Ubuntu.  To account for changes in processing time, additional time checking will be implemented in the example code and the data uploaded soon.
 
