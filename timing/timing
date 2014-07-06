@@ -1,0 +1,35 @@
+entry start
+precomputation (ms): 81877
+precomputation (clock ms): 151818
+total interpolation (ms): 62534
+total interpolation (clock ms): 62501
+interpolation count: 50
+
+entry start
+precomputation (ms): 81942
+precomputation (clock ms): 151927
+total interpolation (ms): 64285
+total interpolation (clock ms): 64247
+interpolation count: 50
+
+entry start
+precomputation (ms): 81801
+precomputation (clock ms): 151836
+total interpolation (ms): 62534
+total interpolation (clock ms): 62499
+interpolation count: 50
+
+entry start
+precomputation (ms): 81854
+precomputation (clock ms): 151855
+total interpolation (ms): 62563
+total interpolation (clock ms): 62530
+interpolation count: 50
+
+entry start
+precomputation (ms): 81833
+precomputation (clock ms): 151851
+total interpolation (ms): 62563
+total interpolation (clock ms): 62529
+interpolation count: 50
+

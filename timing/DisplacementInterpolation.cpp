@@ -35,6 +35,53 @@
 
 // --added for timing code-- //
 #include <ctime>
+#include <time.h>
+
+// --added for timing code-- //
+class timekeeper {
+	struct timespec realTimeStart;
+	struct timespec realTimeStop;
+
+	unsigned clockTimeStart;
+	unsigned clockTimeStop;
+
+public:
+	void clear() {
+		memset(&realTimeStart, 0, sizeof(realTimeStart));
+		memset(&realTimeStop, 0, sizeof(realTimeStop));
+
+		clockTimeStart = 0;
+		clockTimeStop = 0;
+	}
+
+	timekeeper() {
+		clear();
+	}
+
+	void start() {
+		clock_gettime(CLOCK_MONOTONIC, &realTimeStart);
+		clockTimeStart = clock();
+	}
+
+	void stop() {
+		clock_gettime(CLOCK_MONOTONIC, &realTimeStop);
+		clockTimeStop = clock();
+	}
+
+	unsigned getElapsedRealMS() {
+		unsigned milliseconds = 1000 * (realTimeStop.tv_sec - realTimeStart.tv_sec);
+		milliseconds += (realTimeStop.tv_nsec - realTimeStart.tv_nsec) / 1000000;
+
+		return milliseconds;
+	}
+
+	unsigned getElapsedClockMS() {
+		unsigned milliseconds = clockTimeStop - clockTimeStart;
+		milliseconds /= (CLOCKS_PER_SEC / 1000);
+
+		return milliseconds;
+	}
+};
 
 void saveFile(int i, std::vector<double> &values)
 {
@@ -51,19 +98,13 @@ void saveFile(int i, std::vector<double> &values)
 	fclose(f);
 }
 
-// --added for timing code-- //
-// returns a time value which can account for
-// differences in milliseconds (see main)
-unsigned getScaledTime() {
-	return clock() / (CLOCKS_PER_SEC / 1000);
-}
-
 int main()
 {
 	// --added for timing code-- //
-	unsigned timerStart;
-	unsigned precomputationTime;
-	unsigned sumOfInterpolationTimes = 0;
+	timekeeper myTimer;
+	unsigned precomputationRealTime, precomputationClockTime;
+	unsigned sumOfInterpolationRealTimes = 0;
+	unsigned sumOfInterpolationClockTimes = 0;
 
 	int W=50;
 
@@ -101,12 +142,15 @@ int main()
 		1);											   // 1 frequency band (standard displacement interpolation)
 
 	// --added for timing code-- //
-	timerStart = getScaledTime();
+	myTimer.start();
 
 	interp.precompute();
 
 	// --added for timing code-- //
-	precomputationTime = getScaledTime() - timerStart;
+	myTimer.stop();
+	precomputationRealTime = myTimer.getElapsedRealMS();
+	precomputationClockTime = myTimer.getElapsedClockMS();
+	myTimer.clear();
 
 	int N = 50; // we get 50 intermediate steps
 	for (int p=0; p<N; p++)
@@ -114,12 +158,15 @@ int main()
 		double alpha = p/((double)N-1.);
 
 		// --added for timing code-- //
-		timerStart = getScaledTime();
+		myTimer.start();
 
 		interp.interpolate(alpha, samplesPos, valuesR);
 
 		// --added for timing code-- //
-		sumOfInterpolationTimes += getScaledTime() - timerStart;
+		myTimer.stop();
+		sumOfInterpolationRealTimes += myTimer.getElapsedRealMS();
+		sumOfInterpolationClockTimes += myTimer.getElapsedClockMS();
+		myTimer.clear();
 
 		saveFile(p, valuesR);
 	}
@@ -127,8 +174,10 @@ int main()
 	// --added for timing code-- //
 	FILE* timingRecord = fopen("timing", "a");
 	fprintf(timingRecord, "entry start\n");
-	fprintf(timingRecord, "precomputation (ms): %u\n", precomputationTime);
-	fprintf(timingRecord, "total interpolation (ms): %u\n", sumOfInterpolationTimes);
+	fprintf(timingRecord, "precomputation (ms): %u\n", precomputationRealTime);
+	fprintf(timingRecord, "precomputation (clock ms): %u\n", precomputationClockTime);
+	fprintf(timingRecord, "total interpolation (ms): %u\n", sumOfInterpolationRealTimes);
+	fprintf(timingRecord, "total interpolation (clock ms): %u\n", sumOfInterpolationClockTimes);
 	fprintf(timingRecord, "interpolation count: %d\n", N);
 	fprintf(timingRecord, "\n");
 
