@@ -4,7 +4,7 @@ import numpy as np
 from scipy import stats
 
 grid_density = 50
-if (len(sys.argv) > 2: grid_density = int(sys.argv[2])
+if len(sys.argv) > 2: grid_density = int(sys.argv[2])
 
 filename = "probability"
 if len(sys.argv) > 3: filename = sys.argv[3]
