@@ -1,0 +1,34 @@
+Currently, these four python scripts represent the process of taking outcome data from ensemble fields, converting it into a probability distribution, and graphing the resulting distribution.
+
+Here is an overview of each script (square brackets indicate optional command line arguments):
+
+--generate_scalars--
+
+usage: python generate_scalars.py [count] [data_file]
+
+Creates file of scalar values separated by newlines characters.  The scalars are sampled from a normal distribution with a hard-coded mean.  The amount of scalars can be adjusted with the count command line argument.  By default, it will save to a file called scalars, but can also save to data_file.
+
+--generate_vectors--
+
+usage: python generate_vectors.py [count] [data_file]
+
+Creates file of 2D vectors separated by newlines characters (components separated by a space).  The vectors are sampled from a multivariate normal distribution with a hard-coded mean vector.  The amount of vectors can be adjusted with the count command line argument.  By default, it will save to a file called vectors, but can also save to data_file.
+
+--get_probability--
+
+usage: python get_probability.py data_file [grid_density] [distribution_file]
+
+Takes data_file (a set of scalars or 2D vectors separated by newline characters) and converts it to a probabilty distribution using gaussian_kde.  By default, it will output to a file called probability, but can also save to distribution_file.  The distribution_file* contains parts of the distribution function sampled over a uniform grid (spacing determined by grid_density) as well as the boundaries of the grid used for sampling.  Boundaries of the grid are determined by the minimum and maximum values from data_file for each dimension.  The default grid_density is 50.
+
+*The file format:
+<dimensions>(1 or 2)
+<minimum_x maximum_x>
+<minimum_y maximum_y>(for 2 dimensions)
+<data>(rows and columns determined by newline and space, one column for weights of 1D distribution)
+
+--graph_weights--
+
+usage: python graph_weights.py distribution_file
+
+Takes distribution_file output from get_probability script (or from interpolation code soon to come) and reconstructs the uniform grid with weights to create graph of the distribution.
+
