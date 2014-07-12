@@ -45,6 +45,7 @@ if dimensions == 2:
 		weights.append(temp)
 
 	ax = fig.add_subplot(1, 1, 1, projection='3d')
+	ax.invert_xaxis()
 	density = len(weights) * 1j
 	X, Y = np.mgrid[minX:maxX:density, minY:maxY:density]
 	ax.plot_wireframe(X, Y, weights)

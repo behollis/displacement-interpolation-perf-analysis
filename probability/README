@@ -1,4 +1,4 @@
-Currently, these four python scripts represent the process of taking outcome data from ensemble fields, converting it into a probability distribution, and graphing the resulting distribution.
+These six python scripts and C++ code represent the process of taking outcome data from points of an ensemble field, converting it into probability distributions, interpolating, and graphing the resulting distribution.
 
 Here is an overview of each script (square brackets indicate optional command line arguments):
 
@@ -8,11 +8,23 @@ usage: python generate_scalars.py [count] [data_file]
 
 Creates file of scalar values separated by newlines characters.  The scalars are sampled from a normal distribution with a hard-coded mean.  The amount of scalars can be adjusted with the count command line argument.  By default, it will save to a file called scalars, but can also save to data_file.
 
+--bimodal_scalars--
+
+usage: python generate_scalars.py [count] [data_file]
+
+Creates file of scalar values separated by newlines characters.  Some percentage of the scalars are sampled from one normal distribution with a hard-coded mean and the rest from another normal distribution.  The amount of scalars can be adjusted with the count command line argument.  By default, it will save to a file called scalars, but can also save to data_file.
+
 --generate_vectors--
 
 usage: python generate_vectors.py [count] [data_file]
 
 Creates file of 2D vectors separated by newlines characters (components separated by a space).  The vectors are sampled from a multivariate normal distribution with a hard-coded mean vector.  The amount of vectors can be adjusted with the count command line argument.  By default, it will save to a file called vectors, but can also save to data_file.
+
+--bimodal_vectors--
+
+usage: python generate_vectors.py [count] [data_file]
+
+Creates file of 2D vectors separated by newlines characters (components separated by a space).  Some percentage of vectors are sampled from a multivariate normal distribution with a hard-coded mean vector and the rest from another normal distribution.  The amount of vectors can be adjusted with the count command line argument.  By default, it will save to a file called vectors, but can also save to data_file.
 
 --get_probability--
 
@@ -26,9 +38,15 @@ Takes data_file (a set of scalars or 2D vectors separated by newline characters)
 <minimum_y maximum_y>(for 2 dimensions)
 <data>(rows and columns determined by newline and space, one column for weights of 1D distribution)
 
+--interpolate--
+
+usage: ./interpolate distribution_fileA distribution_fileB [distribution_filesOut]
+
+Takes two probability distribution files created from get_probability and interpolates between them using Displacement Interpolation.  It uses a hard-coded grid density of 50 for output files and performs 6 interpolations to save to files.  The interpolations are done at alpha values of 0, 0.2, 0.4, 0.6, 0.8, and 1 then saved to files with increasing numbers in their name.  By specifying a distribution_filesOut string, you can change the name of the output files from the default name, interpolated.
+
 --graph_weights--
 
 usage: python graph_weights.py distribution_file
 
-Takes distribution_file output from get_probability script (or from interpolation code soon to come) and reconstructs the uniform grid with weights to create graph of the distribution.
+Takes distribution_file output from get_probability script (or from interpolate code) and reconstructs the uniform grid with weights to create graph of the distribution.
 
