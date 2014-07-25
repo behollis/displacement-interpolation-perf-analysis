@@ -23,6 +23,8 @@ if dimensions == 1:
 		if not line: break
 		weights.append(float(line))
 
+	print "density: " + repr(len(weights))
+
 	ax = fig.add_subplot(1, 1, 1)
 
 	density = len(weights) * 1j
@@ -44,11 +46,14 @@ if dimensions == 2:
 			temp.append(float(token))
 		weights.append(temp)
 
+	print "density: " + repr(len(weights))
+
 	ax = fig.add_subplot(1, 1, 1, projection='3d')
 	ax.invert_xaxis()
 	density = len(weights) * 1j
 	X, Y = np.mgrid[minX:maxX:density, minY:maxY:density]
-	ax.plot_wireframe(X, Y, weights)
+	#ax.plot_wireframe(X, Y, weights)
+	ax.plot_wireframe(X, Y, weights, rstride=4, cstride=4)
 
 in_file.close()
 

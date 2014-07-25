@@ -1,4 +1,6 @@
 #include "Interpolator.h"
+#include "timekeeper.h"
+
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -189,8 +191,13 @@ int main(int argc, char** argv) {
 	if (argc < 3)
 		error("must provide two data files to interpolate");
 
-	unsigned density = 50;
-	unsigned alphaSteps = 6;
+	unsigned density = 85;
+	unsigned alphaSteps = 50;
+
+	timekeeper myTimer;
+	unsigned precomputationRealTime, precomputationClockTime;
+	unsigned sumOfInterpolationRealTimes = 0;
+	unsigned sumOfInterpolationClockTimes = 0;
 
 	std::string filename = "interpolated";
 	if (argc > 3) filename = argv[3];
@@ -235,7 +242,14 @@ int main(int argc, char** argv) {
 		Interpolator<1,double> interp(samplesPosA, valuesA,
 			samplesPosB, valuesB, sqrDistLinear, rbfFuncLinear,
 			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
 		interp.precompute();
+
+		myTimer.stop();
+		precomputationRealTime = myTimer.getElapsedRealMS();
+		precomputationClockTime = myTimer.getElapsedClockMS();
+		myTimer.clear();
 
 		double minX = min(samplesPosA[0][0], samplesPosB[0][0]);
 		double maxX = max(samplesPosA[samplesPosA.size() - 1][0],
@@ -245,7 +259,14 @@ int main(int argc, char** argv) {
 
 		for (int i = 0; i < alphaSteps; ++i) {
 			double alpha = (double)i / (alphaSteps - 1);
+
+			myTimer.start();
 			interp.interpolate(alpha, samplesPosOut, valuesOut);
+			myTimer.stop();
+			sumOfInterpolationRealTimes += myTimer.getElapsedRealMS();
+			sumOfInterpolationClockTimes += myTimer.getElapsedClockMS();
+			myTimer.clear();
+
 			writeData1D(valuesOut, minX, maxX, filename, i);
 		}
 	}
@@ -261,7 +282,14 @@ int main(int argc, char** argv) {
 		Interpolator<2,double> interp(samplesPosA, valuesA,
 			samplesPosB, valuesB, sqrDistLinear, rbfFuncLinear,
 			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
 		interp.precompute();
+
+		myTimer.stop();
+		precomputationRealTime = myTimer.getElapsedRealMS();
+		precomputationClockTime = myTimer.getElapsedClockMS();
+		myTimer.clear();
 
 		double minX = min(samplesPosA[0][0], samplesPosB[0][0]);
 		double maxX = max(samplesPosA[samplesPosA.size() - 1][0],
@@ -276,7 +304,15 @@ int main(int argc, char** argv) {
 
 		for (int i = 0; i < alphaSteps; ++i) {
 			double alpha = (double)i / (alphaSteps - 1);
+
+			myTimer.start();
 			interp.interpolate(alpha, samplesPosOut, valuesOut);
+
+			myTimer.stop();
+			sumOfInterpolationRealTimes += myTimer.getElapsedRealMS();
+			sumOfInterpolationClockTimes += myTimer.getElapsedClockMS();
+			myTimer.clear();
+
 			writeData2D(valuesOut, minX, maxX, minY, maxY,
 				filename, i);
 		}
@@ -284,6 +320,16 @@ int main(int argc, char** argv) {
 
 	in_fileA.close();
 	in_fileB.close();
+
+	FILE* timingRecord = fopen("timing", "a");
+	fprintf(timingRecord, "entry start\n");
+	fprintf(timingRecord, "precomputation (ms): %u\n", precomputationRealTime);
+	fprintf(timingRecord, "precomputation (clock ms): %u\n", precomputationClockTime);
+	fprintf(timingRecord, "total interpolation (ms): %u\n", sumOfInterpolationRealTimes);
+	fprintf(timingRecord, "total interpolation (clock ms): %u\n", sumOfInterpolationClockTimes);
+	fprintf(timingRecord, "interpolation count: %d\n", alphaSteps);
+	fprintf(timingRecord, "\n");
+	fclose(timingRecord);
 
 	return 0;
 }
