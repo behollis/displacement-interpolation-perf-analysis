@@ -13,8 +13,8 @@
 
 #include <cstdlib>
 
-#define QUANTILE_Q 50
-#define DIV 30
+#define QUANTILE_Q 100
+#define DIV 200
 #define NUM_PTS 150
 
 #define WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN import_array1(-1);
@@ -235,7 +235,7 @@ public:
                 (nextPosition.y - currentPosition.y);
 
             currentDistance += differentialDistance;
-            if (currentDistance - pointDistances > distances[current]) {
+            while (currentDistance - pointDistances > distances[current]) {
                 pointDistances += distances[current];
                 current += 1;
                 if (current > positions.size() - 2) current = positions.size() - 2;
@@ -393,6 +393,7 @@ void parameterizeQuantiles(const std::vector<std::list<Vector2> >& qpts,
         std::list<Vector2>::const_iterator iter;
         for (iter = qpts[k].begin(); iter != qpts[k].end(); ++iter) {
             const Vector2& v = *iter;
+
             cobj.addPoint(v);
         }
 
