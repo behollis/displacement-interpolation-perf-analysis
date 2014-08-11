@@ -1,7 +1,3 @@
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-
-#include "Python.h"
-#include "numpy/arrayobject.h"
 #include "timekeeper.h"
 
 #include <iostream>
@@ -11,17 +7,22 @@
 #include <string>
 #include <sstream>
 
+#define _USE_MATH_DEFINES
+
 #include <cstdlib>
+#include <cmath>
 
 #define QUANTILE_Q 100
 #define DIV 200
 #define NUM_PTS 150
 
-#define WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN import_array1(-1);
-
-PyObject* getKernelDensityEstimateRef;
-PyObject* calculateBoxIntegralRef;
-PyObject* getDensitySurfaceValueRef;
+#ifdef __cplusplus // import copyrighted mvnun fortran subroutine
+extern "C" {
+    void mvnun_(int* d, int* n, double** lower, double** upper,
+        double*** means, double*** covar, int* maxpts,
+        double* abseps, double* releps, double* value, int* inform);
+}
+#endif
 
 void error(const std::string& message);
 
@@ -29,154 +30,203 @@ struct Vector2 {
     double x, y;
 };
 
-struct PythonDensityObject {
-    PyObject* kernel;
-    double minU, minV;
-    double maxU, maxV;
-};
-
 //
-// python stuff
+// kernel density class (ported from scipy)
 //
 
-PyObject* getFunctionRef(PyObject* module, const char* functionName) {
-    PyObject* pFunc = PyObject_GetAttrString(module, functionName);
+class DensityObject {
+    std::vector<Vector2> dataset;
+    unsigned n;
+    double factor;
+    double covariance[4];
+    double inv_cov[4];
 
-    if (pFunc == NULL) error("unable to load function");
-    if (!PyCallable_Check(pFunc)) error("unable to load function");
+    Vector2 min, max;
 
-    return pFunc;
-}
+    double norm_factor;
 
-PyObject* getKernelDensityEstimate(const std::vector<double>& X,
-        const std::vector<double>& Y) {
-    long dim[1];
-    dim[0] = X.size();
+    void computeCovariance() {
+        double xMean = 0.0;
+        double yMean = 0.0;
 
-    double* arrayX = new double[X.size()];
-    std::copy(X.begin(), X.end(), arrayX);
+        for (unsigned i = 0; i < n; ++i) {
+            xMean += dataset[i].x;
+            yMean += dataset[i].y;
+        }
 
-    double* arrayY = new double[Y.size()];
-    std::copy(Y.begin(), Y.end(), arrayY);
+        xMean /= n;
+        yMean /= n;
 
-    PyObject* argX = PyArray_SimpleNewFromData(1, dim, NPY_DOUBLE, arrayX);
-    PyObject* argY = PyArray_SimpleNewFromData(1, dim, NPY_DOUBLE, arrayY);
+        covariance[0] = 0.0; covariance[1] = 0.0;
+        covariance[2] = 0.0; covariance[3] = 0.0;
 
-    PyObject* args = PyTuple_New(2);
-    PyTuple_SetItem(args, 0, argX);
-    PyTuple_SetItem(args, 1, argY);
+        for (unsigned i = 0; i < n; ++i) {
+            double xDiff = dataset[i].x - xMean;
+            double yDiff = dataset[i].y - yMean;
 
-    PyObject* value = PyObject_CallObject(getKernelDensityEstimateRef, args);
+            covariance[0] += xDiff * xDiff;
+            covariance[1] += xDiff * yDiff;
+            //covariance[2] += yDiff * xDiff;
+            covariance[3] += yDiff * yDiff;
+        }
 
-    //Py_CLEAR(argX);
-    //Py_CLEAR(argY);
-    //Py_CLEAR(args);
-
-    return value;
-}
-
-double calculateBoxIntegral(PyObject* kernel, double minX, double minY,
-        double maxX, double maxY) {
-
-    PyObject* argMinX = PyFloat_FromDouble(minX);
-    PyObject* argMinY = PyFloat_FromDouble(minY);
-    PyObject* argMaxX = PyFloat_FromDouble(maxX);
-    PyObject* argMaxY = PyFloat_FromDouble(maxY);
-
-    PyObject* args = PyTuple_New(5);
-    PyTuple_SetItem(args, 0, kernel);
-    PyTuple_SetItem(args, 1, argMinX);
-    PyTuple_SetItem(args, 2, argMinY);
-    PyTuple_SetItem(args, 3, argMaxX);
-    PyTuple_SetItem(args, 4, argMaxY);
-
-    PyObject* value = PyObject_CallObject(calculateBoxIntegralRef, args);
-    double output = PyFloat_AsDouble(value);
-
-    //Py_CLEAR(argMinX);
-    //Py_CLEAR(argMinY);
-    //Py_CLEAR(argMaxX);
-    //Py_CLEAR(argMaxY);
-    //Py_CLEAR(args);
-    //Py_CLEAR(value);
-
-    return output;
-}
-
-double getDensitySurfaceValue(PyObject* kernel, double posX, double posY) {
-    PyObject* argPosX = PyFloat_FromDouble(posX);
-    PyObject* argPosY = PyFloat_FromDouble(posY);
-
-    PyObject* args = PyTuple_New(3);
-    PyTuple_SetItem(args, 0, kernel);
-    PyTuple_SetItem(args, 1, argPosX);
-    PyTuple_SetItem(args, 2, argPosY);
-
-    PyObject* value = PyObject_CallObject(getDensitySurfaceValueRef, args);
-    double output = PyFloat_AsDouble(value);
-
-    //Py_CLEAR(argPosX);
-    //Py_CLEAR(argPosY);
-    //Py_CLEAR(args);
-    //Py_CLEAR(value);
-
-    return output;
-}
-
-void initialize(int argc, char** argv) {
-    Py_Initialize();
-    PySys_SetArgv(argc, argv);
-
-    PyObject* name = PyString_FromString("kde");
-
-    PyObject* module = PyImport_Import(name);
-    if (module == NULL) error("unable to load module");
-
-    getKernelDensityEstimateRef = getFunctionRef(module, "getKernelDensityEstimate");
-    calculateBoxIntegralRef = getFunctionRef(module, "calculateBoxIntegral");
-    getDensitySurfaceValueRef = getFunctionRef(module, "getDensitySurfaceValue");
-
-    Py_CLEAR(name);
-    Py_CLEAR(module);
-}
-
-void setObjectData(PythonDensityObject& dobj, std::vector<Vector2>& v) {
-    std::vector<double> X(v.size());
-    std::vector<double> Y(v.size());
-
-    dobj.minU = dobj.maxU = v[0].x;
-    dobj.minV = dobj.maxV = v[0].y;
-
-    for (unsigned i = 0; i < v.size(); ++i) {
-        X[i] = v[i].x;
-        Y[i] = v[i].y;
-
-        if (X[i] < dobj.minU) dobj.minU = X[i];
-        if (X[i] > dobj.maxU) dobj.maxU = X[i];
-
-        if (Y[i] < dobj.minV) dobj.minV = Y[i];
-        if (Y[i] > dobj.maxV) dobj.maxV = Y[i];
+        covariance[0] *= factor * factor / (n-1);
+        covariance[1] *= factor * factor / (n-1);
+        covariance[2] = covariance[1];
+        covariance[3] *= factor * factor / (n-1);
     }
 
-    dobj.kernel = getKernelDensityEstimate(X, Y);
-}
+    void computeInverseCov() {
+        double determinant = covariance[0] * covariance[3] -
+            covariance[1] * covariance[2];
 
-double getObjectBoxIntegral(PythonDensityObject& dobj,
-        double minU, double minV, double maxU, double maxV) {
+        inv_cov[0] = covariance[3] / determinant;
+        inv_cov[1] = -covariance[1] / determinant;
+        inv_cov[2] = -covariance[2] / determinant;
+        inv_cov[3] = covariance[0] / determinant;
+    }
 
-    return calculateBoxIntegral(dobj.kernel, minU, minV, maxU, maxV);
-}
+    void computeNormFactor() {
+        double determinant = covariance[0] * covariance[3] -
+            covariance[1] * covariance[2];
 
-double getObjectSurfaceValue(PythonDensityObject& dobj, const Vector2& pos) {
-    return getDensitySurfaceValue(dobj.kernel, pos.x, pos.y);
-}
+        norm_factor = sqrt(4.0 * M_PI * M_PI * determinant) * n; 
+    }
 
-void cleanup() {
-    Py_CLEAR(getKernelDensityEstimateRef);
-    Py_CLEAR(calculateBoxIntegralRef);
-    Py_CLEAR(getDensitySurfaceValueRef);
-    Py_Finalize();
-}
+    void findMinAndMax() {
+        min.x = dataset[0].x; min.y = dataset[0].y;
+        max.x = dataset[0].x; max.y = dataset[0].y;
+
+        for (unsigned i = 1; i < n; ++i) {
+            if (dataset[i].x < min.x) min.x = dataset[i].x;
+            if (dataset[i].y < min.y) min.y = dataset[i].y;
+
+            if (dataset[i].x > max.x) max.x = dataset[i].x;
+            if (dataset[i].y > max.y) max.y = dataset[i].y;
+        }
+    }
+
+public:
+    DensityObject(const std::vector<Vector2>& samples) {
+        n = samples.size();
+        dataset = samples;
+        factor = pow(n, -1.0 / 6.0);
+
+        computeCovariance();
+        computeInverseCov();
+        computeNormFactor();
+
+        findMinAndMax();
+    }
+/*
+    void evaluate(const std::vector<Vector2>& points, std::vector<double>& results) {
+        unsigned m = points.size();
+
+        results.clear();
+        results.resize(m, 0);
+
+        if (m >= n) {
+            for (unsigned i = 0; i < n; ++i) {
+                double diffX, diffY;
+                double tdiffX, tdiffY;
+                double energy;
+
+                for (unsigned j = 0; j < m; ++j) {
+                    diffX = dataset[i].x - points[j].x;
+                    diffY = dataset[i].y - points[j].y;
+
+                    tdiffX = inv_cov[0] * diffX + inv_cov[1] * diffY;
+                    tdiffY = inv_cov[2] * diffX + inv_cov[3] * diffY;
+
+                    energy = diffX * tdiffX + diffY * tdiffY;
+                    results[j] += exp(-energy / 2.0);
+                }
+            }
+        } else {
+            for (unsigned i = 0; i < m; ++i) {
+                double diffX, diffY;
+                double tdiffX, tdiffY;
+                double energy;
+
+                for (unsigned j = 0; j < n; ++j) {
+                    diffX = dataset[j].x - points[i].x;
+                    diffY = dataset[j].y - points[i].y;
+
+                    tdiffX = inv_cov[0] * diffX + inv_cov[1] * diffY;
+                    tdiffY = inv_cov[2] * diffX + inv_cov[3] * diffY;
+
+                    energy = diffX * tdiffX + diffY * tdiffY;
+                    results[i] += exp(-energy / 2.0);
+                }
+            }
+        }
+
+        for (unsigned i = 0; i < m; ++i) results[i] /= norm_factor;
+    }
+*/
+    double evaluate(const Vector2& point) {
+        double result = 0.0;
+
+        double diffX, diffY;
+        double tdiffX, tdiffY;
+        double energy;
+
+        for (unsigned i = 0; i < n; ++i) {
+            diffX = dataset[i].x - point.x;
+            diffY = dataset[i].y - point.y;
+
+            tdiffX = inv_cov[0] * diffX + inv_cov[1] * diffY;
+            tdiffY = inv_cov[2] * diffX + inv_cov[3] * diffY;
+
+            energy = diffX * tdiffX + diffY * tdiffY;
+            result += exp(-energy / 2.0);
+        }
+
+        return result / norm_factor;
+    }
+
+    double integrate_box(const Vector2& low_bounds, const Vector2& high_bounds) {
+        int d = 2;
+        int maxpts = d * 1000;
+        double abseps = 1e-6;
+        double releps = 1e-6;
+
+        double value;
+        int inform;
+
+        mvnun_(&d, (int*)&(n), (double**)&low_bounds, (double**)&high_bounds,
+            (double***)&dataset[0], (double***)covariance, &maxpts,
+            &abseps, &releps, &value, &inform);
+
+        if (inform) std::cerr << "warning: mvnun inform" << std::endl;
+
+        return value;
+    }
+
+    unsigned getN() const {
+        return n;
+    }
+
+    double getFactor() const {
+        return factor;
+    }
+
+    const double* const getCovariance() const {
+        return covariance;
+    }
+
+    const double* const getInverseCov() const {
+        return inv_cov;
+    }
+
+    const Vector2& getMin() const {
+        return min;
+    }
+
+    const Vector2& getMax() const {
+        return max;
+    }
+};
 
 //
 // curve interpolation class (linear)
@@ -349,30 +399,27 @@ void savePDFFile(const std::string& filename,
 // algorithms from paper
 //
 
-void calculateCDF(PythonDensityObject& dobj,
+void calculateCDF(DensityObject& dobj,
         const std::vector<double>& quantiles,
         std::vector<std::list<Vector2> >& quantilePoints) {
 
     const double TOL = 0.5 / QUANTILE_Q;
-    const double differentialU = (dobj.maxU - dobj.minU) / (DIV - 1);
-    const double differentialV = (dobj.maxV - dobj.minV) / (DIV - 1);
+    const double differentialU = (dobj.getMax().x - dobj.getMin().x) / (DIV - 1);
+    const double differentialV = (dobj.getMax().y - dobj.getMin().y) / (DIV - 1);
 
     for (unsigned i = 0; i < DIV; ++i) {
         for (unsigned j = 0; j < DIV; ++j) {
-            double u = dobj.minU + i * differentialU;
-            double v = dobj.minV + j * differentialV;
+            Vector2 uv_coord;
+            uv_coord.x = dobj.getMin().x + i * differentialU;
+            uv_coord.y = dobj.getMin().y + j * differentialV;
 
-            double d = getObjectBoxIntegral(dobj, dobj.minU, dobj.minV, u, v);
+            double d = dobj.integrate_box(dobj.getMin(), uv_coord);
 
             for (unsigned k = 0; k < quantiles.size(); ++k) {
                 double q = quantiles[k];
 
                 if ((q - TOL < d) && (q + TOL > d)) {
-                    Vector2 point;
-                    point.x = u;
-                    point.y = v;
-
-                    quantilePoints[k].push_back(point);
+                    quantilePoints[k].push_back(uv_coord);
                 }
             }
         }
@@ -426,9 +473,9 @@ void interpolateQuantiles(const std::vector<std::vector<Vector2> >& qcurvesA,
     }
 }
 
-void evaluatePDFValues(PythonDensityObject& dobjA,
+void evaluatePDFValues(DensityObject& dobjA,
         const std::vector<std::vector<Vector2> >& qcurvesA,
-        PythonDensityObject& dobjB,
+        DensityObject& dobjB,
         const std::vector<std::vector<Vector2> >& qcurvesB,
         double alpha, std::vector<std::vector<double> >& ipdf) {
 
@@ -445,8 +492,8 @@ void evaluatePDFValues(PythonDensityObject& dobjA,
             const Vector2& vectorA = qcurvesA[k][i];
             const Vector2& vectorB = qcurvesB[k][i];
 
-            double valueA = getObjectSurfaceValue(dobjA, vectorA);
-            double valueB = getObjectSurfaceValue(dobjB, vectorB);
+            double valueA = dobjA.evaluate(vectorA);
+            double valueB = dobjB.evaluate(vectorB);
 
             ipdf[k][i] = valueA * valueB;
             ipdf[k][i] /= (1.0 - alpha) * valueB + alpha * valueA;
@@ -455,9 +502,6 @@ void evaluatePDFValues(PythonDensityObject& dobjA,
 }
 
 int main(int argc, char** argv) {
-    initialize(argc, argv);
-WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
-
     timekeeper myTimer;
 
     if (argc < 3) error("please provide vector sample files");
@@ -470,7 +514,7 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
     //
 
     std::vector<Vector2> vectorSamplesA;
-    PythonDensityObject kernelDensityA;
+    //PythonDensityObject kernelDensityA;
     std::vector<double> quantilesA;
     std::vector<std::list<Vector2> > quantilePointsA;
     std::vector<std::vector<Vector2> > quantileCurvesA;
@@ -484,13 +528,15 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
     for (unsigned i = 0; i < quantilePointsA.size(); ++i)
         quantilePointsA[i] = std::list<Vector2>();
 
-    setObjectData(kernelDensityA, vectorSamplesA);
+    //setObjectData(kernelDensityA, vectorSamplesA);
+    DensityObject kernelDensityA(vectorSamplesA);
 
     std::cout << "calculating CDF of distribution A..." << std::endl;
     myTimer.start();
     calculateCDF(kernelDensityA, quantilesA, quantilePointsA);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
     myTimer.clear();
 
     std::cout << "parameterizing quantiles of distribution A..." << std::endl;
@@ -498,6 +544,7 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
     parameterizeQuantiles(quantilePointsA, quantilesA, quantileCurvesA);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
     myTimer.clear();
 
     saveQuantileCurvesFile("curvesA", quantileCurvesA);
@@ -507,7 +554,7 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
     //
 
     std::vector<Vector2> vectorSamplesB;
-    PythonDensityObject kernelDensityB;
+    //PythonDensityObject kernelDensityB;
     std::vector<double> quantilesB;
     std::vector<std::list<Vector2> > quantilePointsB;
     std::vector<std::vector<Vector2> > quantileCurvesB;
@@ -521,13 +568,15 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
     for (unsigned i = 0; i < quantilePointsB.size(); ++i)
         quantilePointsB[i] = std::list<Vector2>();
 
-    setObjectData(kernelDensityB, vectorSamplesB);
+    //setObjectData(kernelDensityB, vectorSamplesB);
+    DensityObject kernelDensityB(vectorSamplesB);
 
     std::cout << "calculating CDF of distribution B..." << std::endl;
     myTimer.start();
     calculateCDF(kernelDensityB, quantilesB, quantilePointsB);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
     myTimer.clear();
 
     std::cout << "parameterizing quantiles of distribution B..." << std::endl;
@@ -535,6 +584,7 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
     parameterizeQuantiles(quantilePointsB, quantilesB, quantileCurvesB);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
     myTimer.clear();
 
     saveQuantileCurvesFile("curvesB", quantileCurvesB);
@@ -556,6 +606,7 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
         interpolateQuantiles(quantileCurvesA, quantileCurvesB, alpha, quantileCurvesOut);
         myTimer.stop();
         std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
         myTimer.clear();
 
         //saveQuantileCurvesFile("curvesOut", quantileCurvesOut);
@@ -566,12 +617,11 @@ WEIRD_MACRO_AFTER_INITIALIZE_IN_MAIN
             quantileCurvesB, alpha, interpolatedPDFValues);
         myTimer.stop();
         std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
         myTimer.clear();
 
         savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i);
     }
-
-    cleanup();
 
     std::cout << "done." << std::endl;
     return 0;

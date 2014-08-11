@@ -1,4 +1,4 @@
-These files represent a work in progress of a C++ implementation of bivariate quantile interpolation.  Currently, it relies on Python calls to gaussian_kde and its associated methods, integrate_box and evaluate.  The file kde.py contain the Python code which the qInterpolate program calls.
+These files represent a work in progress of a C++ implementation of bivariate quantile interpolation.  The qInterpolate executable is built by linking in the compiled mvndst.f fortran code and makes use of its mvnun subroutine for integrate_box.
 
 Here is an overview of what each file does:
 
@@ -7,8 +7,6 @@ Here is an overview of what each file does:
 usage: ./qInterpolate samplesFileA samplesFileB [outputDistributionFile]
 
 Each sample file represents a set of vectors sampled either according to some underlying probability distribution function.  The program will use Python to construct a kernel density estimate, find quantile curves, and perform bivariate quantile interpolation.  quantile curves from both distributions are saved to files "curvesA" and "curvesB".  By default, it performs 6 steps at alpha values of 0, 0.2, 0.4, 0.6, 0.8, and 1 then writes the results to "interpolatedPDF" files or the optional outputDistributionFile input.
-
-Note: to get sample files, I use the generate_vectors.py and bimodal_vectors.py scripts.
 
 ---viewCurves.py---
 
