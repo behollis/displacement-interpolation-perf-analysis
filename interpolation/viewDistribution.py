@@ -19,6 +19,6 @@ for line in in_file.readlines():
 	Y.append(float(tokens[1]))
 	Z.append(float(tokens[2]))
 
-ax.scatter(X, Y, Z, s=0.1, c=(100*Z))
+ax.scatter(X, Y, Z, s=0.1)
 plt.show()
 

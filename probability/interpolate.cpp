@@ -1,5 +1,6 @@
 #include "Interpolator.h"
 #include "timekeeper.h"
+#include "DensityObject.h"
 
 #include <fstream>
 #include <sstream>
@@ -12,7 +13,7 @@
        __typeof__ (b) _b = (b); \
      _a > _b ? _a : _b; })
 #endif
-
+/*
 void error(const std::string& message) {
 	std::cerr << "ERROR: " << message << std::endl;
 	exit(1);
@@ -43,7 +44,7 @@ void createSampleGrid1D(double minX, double maxX,
 		samplesPos[i][0] = minX + i * dx;
 	}
 }
-
+*/
 void createSampleGrid2D(double minX, double maxX,
 		double minY, double maxY,
 		unsigned density,
@@ -63,7 +64,7 @@ void createSampleGrid2D(double minX, double maxX,
 		samplesPos[i][1] = minY + iY * dy;
 	}
 }
-
+/*
 void readData1D(std::vector<Vector<1,double> >& samplesPos,
 		std::vector<double>& values,
 		std::ifstream& in_file) {
@@ -160,7 +161,7 @@ void writeData1D(std::vector<double>& values,
 
 	out_file.close();
 }
-
+*/
 void writeData2D(std::vector<double>& values,
 		double minX, double maxX, double minY, double maxY,
 		const std::string& filename, int step) {
@@ -191,10 +192,12 @@ int main(int argc, char** argv) {
 	if (argc < 3)
 		error("must provide two data files to interpolate");
 
-	unsigned density = 85;
-	unsigned alphaSteps = 50;
+	unsigned density = 50;
+	unsigned alphaSteps = 6;
 
 	timekeeper myTimer;
+	unsigned pdfAConstructionRealTime, pdfBConstructionRealTime;
+	unsigned pdfAConstructionClockTime, pdfBConstructionClockTime;
 	unsigned precomputationRealTime, precomputationClockTime;
 	unsigned sumOfInterpolationRealTimes = 0;
 	unsigned sumOfInterpolationClockTimes = 0;
@@ -202,6 +205,50 @@ int main(int argc, char** argv) {
 	std::string filename = "interpolated";
 	if (argc > 3) filename = argv[3];
 
+	Vector2 pos;
+
+	std::vector<Vector2> vectorsA;
+	std::vector<Vector<2,double> > samplesPosA;
+	std::vector<double> valuesA;
+
+	readSamplesFile(argv[1], vectorsA);
+	DensityObject dobjA(vectorsA);
+	createSampleGrid2D(dobjA.getMin().x, dobjA.getMax().x, dobjA.getMin().y,
+		dobjA.getMax().y, density, samplesPosA);
+
+	valuesA.resize(samplesPosA.size());
+	myTimer.start();
+	for (unsigned i = 0; i < samplesPosA.size(); ++i) {
+		pos.x = samplesPosA[i][0];
+		pos.y = samplesPosA[i][1];
+		valuesA[i] = dobjA.evaluate(pos);
+	}
+	myTimer.stop();
+	pdfAConstructionRealTime = myTimer.getElapsedRealMS();
+	pdfAConstructionClockTime = myTimer.getElapsedClockMS();
+	myTimer.clear();
+
+	std::vector<Vector2> vectorsB;
+	std::vector<Vector<2,double> > samplesPosB;
+	std::vector<double> valuesB;
+
+	readSamplesFile(argv[2], vectorsB);
+	DensityObject dobjB(vectorsB);
+	createSampleGrid2D(dobjB.getMin().x, dobjB.getMax().x, dobjB.getMin().y,
+		dobjB.getMax().y, density, samplesPosB);
+
+	valuesB.resize(samplesPosB.size());
+	myTimer.start();
+	for (unsigned i = 0; i < samplesPosB.size(); ++i) {
+		pos.x = samplesPosB[i][0];
+		pos.y = samplesPosB[i][1];
+		valuesB[i] = dobjB.evaluate(pos);
+	}
+	myTimer.stop();
+	pdfBConstructionRealTime = myTimer.getElapsedRealMS();
+	pdfBConstructionClockTime = myTimer.getElapsedClockMS();
+	myTimer.clear();
+/*
 	std::ifstream in_fileA(argv[1]);
 	if (!in_fileA.is_open())
 		error("unable to open first data file");
@@ -224,8 +271,8 @@ int main(int argc, char** argv) {
 	if (dimensionsA < 1)
 		error("dimensions cannot be determined");
 
-	if (dimensionsA > 2)
-		error("number of dimensions currently unsupported");
+	if (dimensionsA > 2 || dimensionsA == 1)
+		error("number of dimensions unsupported");
 
 	std::vector<double> valuesA;
 	std::vector<double> valuesB;
@@ -278,7 +325,7 @@ int main(int argc, char** argv) {
 
 		readData2D(samplesPosA, valuesA, in_fileA);
 		readData2D(samplesPosB, valuesB, in_fileB);
-
+*/
 		Interpolator<2,double> interp(samplesPosA, valuesA,
 			samplesPosB, valuesB, sqrDistLinear, rbfFuncLinear,
 			interpolateBinsLinear, 2, 1);
@@ -299,6 +346,8 @@ int main(int argc, char** argv) {
 		double maxY = max(samplesPosA[samplesPosA.size() - 1][1],
 			samplesPosB[samplesPosB.size() - 1][1]);
 
+		std::vector<Vector<2,double> > samplesPosOut;
+		std::vector<double> valuesOut;
 		createSampleGrid2D(minX, maxX, minY, maxY,
 			density, samplesPosOut);
 
@@ -316,13 +365,17 @@ int main(int argc, char** argv) {
 			writeData2D(valuesOut, minX, maxX, minY, maxY,
 				filename, i);
 		}
-	}
+	/*}
 
 	in_fileA.close();
 	in_fileB.close();
-
+*/
 	FILE* timingRecord = fopen("timing", "a");
 	fprintf(timingRecord, "entry start\n");
+	fprintf(timingRecord, "PDF A construction (ms): %u\n", pdfAConstructionRealTime);
+	fprintf(timingRecord, "PDF A construction (clock ms): %u\n", pdfAConstructionClockTime);
+	fprintf(timingRecord, "PDF B construction (ms): %u\n", pdfBConstructionRealTime);
+	fprintf(timingRecord, "PDF B construction (clock ms): %u\n", pdfBConstructionClockTime);
 	fprintf(timingRecord, "precomputation (ms): %u\n", precomputationRealTime);
 	fprintf(timingRecord, "precomputation (clock ms): %u\n", precomputationClockTime);
 	fprintf(timingRecord, "total interpolation (ms): %u\n", sumOfInterpolationRealTimes);
@@ -333,4 +386,3 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
-

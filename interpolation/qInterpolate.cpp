@@ -1,4 +1,5 @@
 #include "timekeeper.h"
+#include "DensityObject.h"
 
 #include <iostream>
 #include <fstream>
@@ -12,221 +13,11 @@
 #include <cstdlib>
 #include <cmath>
 
-#define QUANTILE_Q 100
-#define DIV 200
+#define QUANTILE_Q 50
+#define DIV 100
 #define NUM_PTS 150
 
-#ifdef __cplusplus // import copyrighted mvnun fortran subroutine
-extern "C" {
-    void mvnun_(int* d, int* n, double** lower, double** upper,
-        double*** means, double*** covar, int* maxpts,
-        double* abseps, double* releps, double* value, int* inform);
-}
-#endif
-
 void error(const std::string& message);
-
-struct Vector2 {
-    double x, y;
-};
-
-//
-// kernel density class (ported from scipy)
-//
-
-class DensityObject {
-    std::vector<Vector2> dataset;
-    unsigned n;
-    double factor;
-    double covariance[4];
-    double inv_cov[4];
-
-    Vector2 min, max;
-
-    double norm_factor;
-
-    void computeCovariance() {
-        double xMean = 0.0;
-        double yMean = 0.0;
-
-        for (unsigned i = 0; i < n; ++i) {
-            xMean += dataset[i].x;
-            yMean += dataset[i].y;
-        }
-
-        xMean /= n;
-        yMean /= n;
-
-        covariance[0] = 0.0; covariance[1] = 0.0;
-        covariance[2] = 0.0; covariance[3] = 0.0;
-
-        for (unsigned i = 0; i < n; ++i) {
-            double xDiff = dataset[i].x - xMean;
-            double yDiff = dataset[i].y - yMean;
-
-            covariance[0] += xDiff * xDiff;
-            covariance[1] += xDiff * yDiff;
-            //covariance[2] += yDiff * xDiff;
-            covariance[3] += yDiff * yDiff;
-        }
-
-        covariance[0] *= factor * factor / (n-1);
-        covariance[1] *= factor * factor / (n-1);
-        covariance[2] = covariance[1];
-        covariance[3] *= factor * factor / (n-1);
-    }
-
-    void computeInverseCov() {
-        double determinant = covariance[0] * covariance[3] -
-            covariance[1] * covariance[2];
-
-        inv_cov[0] = covariance[3] / determinant;
-        inv_cov[1] = -covariance[1] / determinant;
-        inv_cov[2] = -covariance[2] / determinant;
-        inv_cov[3] = covariance[0] / determinant;
-    }
-
-    void computeNormFactor() {
-        double determinant = covariance[0] * covariance[3] -
-            covariance[1] * covariance[2];
-
-        norm_factor = sqrt(4.0 * M_PI * M_PI * determinant) * n; 
-    }
-
-    void findMinAndMax() {
-        min.x = dataset[0].x; min.y = dataset[0].y;
-        max.x = dataset[0].x; max.y = dataset[0].y;
-
-        for (unsigned i = 1; i < n; ++i) {
-            if (dataset[i].x < min.x) min.x = dataset[i].x;
-            if (dataset[i].y < min.y) min.y = dataset[i].y;
-
-            if (dataset[i].x > max.x) max.x = dataset[i].x;
-            if (dataset[i].y > max.y) max.y = dataset[i].y;
-        }
-    }
-
-public:
-    DensityObject(const std::vector<Vector2>& samples) {
-        n = samples.size();
-        dataset = samples;
-        factor = pow(n, -1.0 / 6.0);
-
-        computeCovariance();
-        computeInverseCov();
-        computeNormFactor();
-
-        findMinAndMax();
-    }
-/*
-    void evaluate(const std::vector<Vector2>& points, std::vector<double>& results) {
-        unsigned m = points.size();
-
-        results.clear();
-        results.resize(m, 0);
-
-        if (m >= n) {
-            for (unsigned i = 0; i < n; ++i) {
-                double diffX, diffY;
-                double tdiffX, tdiffY;
-                double energy;
-
-                for (unsigned j = 0; j < m; ++j) {
-                    diffX = dataset[i].x - points[j].x;
-                    diffY = dataset[i].y - points[j].y;
-
-                    tdiffX = inv_cov[0] * diffX + inv_cov[1] * diffY;
-                    tdiffY = inv_cov[2] * diffX + inv_cov[3] * diffY;
-
-                    energy = diffX * tdiffX + diffY * tdiffY;
-                    results[j] += exp(-energy / 2.0);
-                }
-            }
-        } else {
-            for (unsigned i = 0; i < m; ++i) {
-                double diffX, diffY;
-                double tdiffX, tdiffY;
-                double energy;
-
-                for (unsigned j = 0; j < n; ++j) {
-                    diffX = dataset[j].x - points[i].x;
-                    diffY = dataset[j].y - points[i].y;
-
-                    tdiffX = inv_cov[0] * diffX + inv_cov[1] * diffY;
-                    tdiffY = inv_cov[2] * diffX + inv_cov[3] * diffY;
-
-                    energy = diffX * tdiffX + diffY * tdiffY;
-                    results[i] += exp(-energy / 2.0);
-                }
-            }
-        }
-
-        for (unsigned i = 0; i < m; ++i) results[i] /= norm_factor;
-    }
-*/
-    double evaluate(const Vector2& point) {
-        double result = 0.0;
-
-        double diffX, diffY;
-        double tdiffX, tdiffY;
-        double energy;
-
-        for (unsigned i = 0; i < n; ++i) {
-            diffX = dataset[i].x - point.x;
-            diffY = dataset[i].y - point.y;
-
-            tdiffX = inv_cov[0] * diffX + inv_cov[1] * diffY;
-            tdiffY = inv_cov[2] * diffX + inv_cov[3] * diffY;
-
-            energy = diffX * tdiffX + diffY * tdiffY;
-            result += exp(-energy / 2.0);
-        }
-
-        return result / norm_factor;
-    }
-
-    double integrate_box(const Vector2& low_bounds, const Vector2& high_bounds) {
-        int d = 2;
-        int maxpts = d * 1000;
-        double abseps = 1e-6;
-        double releps = 1e-6;
-
-        double value;
-        int inform;
-
-        mvnun_(&d, (int*)&(n), (double**)&low_bounds, (double**)&high_bounds,
-            (double***)&dataset[0], (double***)covariance, &maxpts,
-            &abseps, &releps, &value, &inform);
-
-        if (inform) std::cerr << "warning: mvnun inform" << std::endl;
-
-        return value;
-    }
-
-    unsigned getN() const {
-        return n;
-    }
-
-    double getFactor() const {
-        return factor;
-    }
-
-    const double* const getCovariance() const {
-        return covariance;
-    }
-
-    const double* const getInverseCov() const {
-        return inv_cov;
-    }
-
-    const Vector2& getMin() const {
-        return min;
-    }
-
-    const Vector2& getMax() const {
-        return max;
-    }
-};
 
 //
 // curve interpolation class (linear)
@@ -303,47 +94,6 @@ public:
 //
 // misc functions
 //
-
-void error(const std::string& message) {
-    std::cerr << "Error: " << message << std::endl;
-    exit(1);
-}
-
-void split(const std::string& line, char delim,
-        std::vector<std::string>& elems) {
-
-    std::stringstream lineStream(line);
-    std::string token;
-
-    elems.clear();
-
-    while (std::getline(lineStream, token, delim)) {
-        if (token.length() > 0) elems.push_back(token);
-    }    
-}
-
-void readSamplesFile(const std::string& filePath,
-        std::vector<Vector2>& samplesVector) {
-
-    std::ifstream samplesFile(filePath.c_str());
-    if (!samplesFile.is_open()) error("Unable to open vector sample file");
-
-    samplesVector.clear();
-    std::string line;
-    std::vector<std::string> tokens;
-
-    while (std::getline(samplesFile, line)) {
-        split(line, ' ', tokens);
-
-        Vector2 v;
-        v.x = atof(tokens[0].c_str());
-        v.y = atof(tokens[1].c_str());
-
-        samplesVector.push_back(v);
-    }
-
-    samplesFile.close();
-}
 
 void generateQuantiles(unsigned q, std::vector<double>& quantiles) {
     if (q < 2) {
@@ -450,7 +200,10 @@ void parameterizeQuantiles(const std::vector<std::list<Vector2> >& qpts,
 }
 
 void interpolateQuantiles(const std::vector<std::vector<Vector2> >& qcurvesA,
-        const std::vector<std::vector<Vector2> >& qcurvesB, double alpha,
+        const std::vector<std::vector<Vector2> >& qcurvesB,
+        const std::vector<std::vector<Vector2> >& qcurvesC,
+        const std::vector<std::vector<Vector2> >& qcurvesD,
+        double alpha, double beta,
         std::vector<std::vector<Vector2> >& qcurvesOut) {
 
     qcurvesOut.clear();
@@ -459,16 +212,36 @@ void interpolateQuantiles(const std::vector<std::vector<Vector2> >& qcurvesA,
     for (unsigned k = 0; k < qcurvesA.size(); ++k) {
         qcurvesOut[k] = std::vector<Vector2>();
 
-        if (qcurvesA[k].size() == 0 || qcurvesB[k].size() == 0) continue;
+        if (qcurvesA[k].size() == 0) continue;
+        if (qcurvesB[k].size() == 0) continue;
+        if (qcurvesC[k].size() == 0) continue;
+        if (qcurvesD[k].size() == 0) continue;
 
         qcurvesOut[k].resize(qcurvesA[k].size());
 
         for (unsigned i = 0; i < qcurvesA[k].size(); ++i) {
+            const Vector2& A = qcurvesA[k][i];
+            const Vector2& B = qcurvesB[k][i];
+            const Vector2& C = qcurvesC[k][i];
+            const Vector2& D = qcurvesD[k][i];
+
+            Vector2 AB;
+            AB.x = A.x + alpha * (B.x - A.x);
+            AB.y = A.y + alpha * (B.y - A.y);
+
+            Vector2 CD;
+            CD.x = C.x + alpha * (D.x - C.x);
+            CD.y = C.y + alpha * (D.y - C.y);
+
+            qcurvesOut[k][i].x = AB.x + beta * (CD.x - AB.x);
+            qcurvesOut[k][i].y = AB.y + beta * (CD.y - AB.y);
+/*
             qcurvesOut[k][i].x = qcurvesA[k][i].x;
             qcurvesOut[k][i].y = qcurvesA[k][i].y;
 
             qcurvesOut[k][i].x += alpha * (qcurvesB[k][i].x - qcurvesA[k][i].x);
             qcurvesOut[k][i].y += alpha * (qcurvesB[k][i].y - qcurvesA[k][i].y);
+*/
         }
     }
 }
@@ -477,26 +250,51 @@ void evaluatePDFValues(DensityObject& dobjA,
         const std::vector<std::vector<Vector2> >& qcurvesA,
         DensityObject& dobjB,
         const std::vector<std::vector<Vector2> >& qcurvesB,
-        double alpha, std::vector<std::vector<double> >& ipdf) {
+        DensityObject& dobjC,
+        const std::vector<std::vector<Vector2> >& qcurvesC,
+        DensityObject& dobjD,
+        const std::vector<std::vector<Vector2> >& qcurvesD,
+        double alpha, double beta,
+        std::vector<std::vector<double> >& ipdf) {
 
     ipdf.clear();
     ipdf.resize(qcurvesA.size());
 
     for (unsigned k = 0; k < qcurvesA.size(); ++k) {
         ipdf[k] = std::vector<double>();
-        if (qcurvesA[k].size() == 0 || qcurvesB[k].size() == 0) continue;
+
+        if (qcurvesA[k].size() == 0) continue;
+        if (qcurvesB[k].size() == 0) continue;
+        if (qcurvesC[k].size() == 0) continue;
+        if (qcurvesD[k].size() == 0) continue;
 
         ipdf[k].resize(qcurvesA[k].size());
 
         for (unsigned i = 0; i < qcurvesA[k].size(); ++i) {
             const Vector2& vectorA = qcurvesA[k][i];
             const Vector2& vectorB = qcurvesB[k][i];
+            const Vector2& vectorC = qcurvesC[k][i];
+            const Vector2& vectorD = qcurvesD[k][i];
 
-            double valueA = dobjA.evaluate(vectorA);
-            double valueB = dobjB.evaluate(vectorB);
+            double f0 = dobjA.evaluate(vectorA);
+            double f1 = dobjB.evaluate(vectorB);
+            double f2 = dobjC.evaluate(vectorC);
+            double f3 = dobjD.evaluate(vectorD);
 
+            double A = f0 * f2 * f3 - f1 * f2 * f3;
+            double B = f0 * f1 * f3 - f1 * f2 * f3;
+            double C = f1 * f2 * f3 - f0 * f2 * f3;
+            C = C - f0 * f1 * f3 + f0 * f1 * f2;
+
+            double denominator = f1 * f2 * f3 + alpha * A + beta * B;
+            denominator += alpha * beta * C;
+
+            ipdf[k][i] = f0 * f1 * f2 * f3;
+            ipdf[k][i] /= denominator;
+/*
             ipdf[k][i] = valueA * valueB;
             ipdf[k][i] /= (1.0 - alpha) * valueB + alpha * valueA;
+*/
         }
     }
 }
@@ -504,17 +302,16 @@ void evaluatePDFValues(DensityObject& dobjA,
 int main(int argc, char** argv) {
     timekeeper myTimer;
 
-    if (argc < 3) error("please provide vector sample files");
+    if (argc < 5) error("please provide vector sample files");
 
     std::string outputFile = "interpolatedPDF";
-    if (argc > 3) outputFile = argv[3];
+    if (argc > 5) outputFile = argv[5];
 
     //
     // distribution A
     //
 
     std::vector<Vector2> vectorSamplesA;
-    //PythonDensityObject kernelDensityA;
     std::vector<double> quantilesA;
     std::vector<std::list<Vector2> > quantilePointsA;
     std::vector<std::vector<Vector2> > quantileCurvesA;
@@ -528,7 +325,6 @@ int main(int argc, char** argv) {
     for (unsigned i = 0; i < quantilePointsA.size(); ++i)
         quantilePointsA[i] = std::list<Vector2>();
 
-    //setObjectData(kernelDensityA, vectorSamplesA);
     DensityObject kernelDensityA(vectorSamplesA);
 
     std::cout << "calculating CDF of distribution A..." << std::endl;
@@ -554,7 +350,6 @@ int main(int argc, char** argv) {
     //
 
     std::vector<Vector2> vectorSamplesB;
-    //PythonDensityObject kernelDensityB;
     std::vector<double> quantilesB;
     std::vector<std::list<Vector2> > quantilePointsB;
     std::vector<std::vector<Vector2> > quantileCurvesB;
@@ -568,7 +363,6 @@ int main(int argc, char** argv) {
     for (unsigned i = 0; i < quantilePointsB.size(); ++i)
         quantilePointsB[i] = std::list<Vector2>();
 
-    //setObjectData(kernelDensityB, vectorSamplesB);
     DensityObject kernelDensityB(vectorSamplesB);
 
     std::cout << "calculating CDF of distribution B..." << std::endl;
@@ -590,40 +384,125 @@ int main(int argc, char** argv) {
     saveQuantileCurvesFile("curvesB", quantileCurvesB);
 
     //
+    // distribution C
+    //
+
+    std::vector<Vector2> vectorSamplesC;
+    std::vector<double> quantilesC;
+    std::vector<std::list<Vector2> > quantilePointsC;
+    std::vector<std::vector<Vector2> > quantileCurvesC;
+
+    readSamplesFile(argv[3], vectorSamplesC);
+    generateQuantiles(QUANTILE_Q, quantilesC);
+
+    if (vectorSamplesC.size() == 0) error("no vector samples found");
+
+    quantilePointsC.resize(quantilesC.size());
+    for (unsigned i = 0; i < quantilePointsC.size(); ++i)
+        quantilePointsC[i] = std::list<Vector2>();
+
+    DensityObject kernelDensityC(vectorSamplesC);
+
+    std::cout << "calculating CDF of distribution C..." << std::endl;
+    myTimer.start();
+    calculateCDF(kernelDensityC, quantilesC, quantilePointsC);
+    myTimer.stop();
+    std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+    myTimer.clear();
+
+    std::cout << "parameterizing quantiles of distribution C..." << std::endl;
+    myTimer.start();
+    parameterizeQuantiles(quantilePointsC, quantilesC, quantileCurvesC);
+    myTimer.stop();
+    std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+    myTimer.clear();
+
+    saveQuantileCurvesFile("curvesC", quantileCurvesC);
+
+    //
+    // distribution D
+    //
+
+    std::vector<Vector2> vectorSamplesD;
+    std::vector<double> quantilesD;
+    std::vector<std::list<Vector2> > quantilePointsD;
+    std::vector<std::vector<Vector2> > quantileCurvesD;
+
+    readSamplesFile(argv[4], vectorSamplesD);
+    generateQuantiles(QUANTILE_Q, quantilesD);
+
+    if (vectorSamplesD.size() == 0) error("no vector samples found");
+
+    quantilePointsD.resize(quantilesD.size());
+    for (unsigned i = 0; i < quantilePointsD.size(); ++i)
+        quantilePointsD[i] = std::list<Vector2>();
+
+    DensityObject kernelDensityD(vectorSamplesD);
+
+    std::cout << "calculating CDF of distribution D..." << std::endl;
+    myTimer.start();
+    calculateCDF(kernelDensityD, quantilesD, quantilePointsD);
+    myTimer.stop();
+    std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+    myTimer.clear();
+
+    std::cout << "parameterizing quantiles of distribution D..." << std::endl;
+    myTimer.start();
+    parameterizeQuantiles(quantilePointsD, quantilesD, quantileCurvesD);
+    myTimer.stop();
+    std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+    myTimer.clear();
+
+    saveQuantileCurvesFile("curvesD", quantileCurvesD);
+
+    //
     // interpolated distribution (currently just from two distributions)
     //
 
     unsigned alphaSteps = 6;
+    unsigned betaSteps = 6;
     std::vector<std::vector<Vector2> > quantileCurvesOut;
     std::vector<std::vector<double> > interpolatedPDFValues;
 
     for (unsigned i = 0; i < alphaSteps; ++i) {
-        double alpha = (double)i / (alphaSteps - 1);
-        std::cout << "--- alpha = " << alpha << " ---" << std::endl;
+        for (unsigned j = 0; j < betaSteps; ++j) {
+            double alpha = (double)i / (alphaSteps - 1);
+            double beta = (double)j / (betaSteps - 1);
 
-        std::cout << "interpolating quantiles of both distributions..." << std::endl;
-        myTimer.start();
-        interpolateQuantiles(quantileCurvesA, quantileCurvesB, alpha, quantileCurvesOut);
-        myTimer.stop();
-        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
-        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
-        myTimer.clear();
+            std::cout << "--- alpha = " << alpha << ", beta = ";
+            std::cout << beta << " ---" << std::endl;
+
+            std::cout << "interpolating quantiles of distributions..." << std::endl;
+            myTimer.start();
+            interpolateQuantiles(quantileCurvesA, quantileCurvesB,
+                quantileCurvesC, quantileCurvesD, alpha, beta,
+                quantileCurvesOut);
+            myTimer.stop();
+            std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+            std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+            myTimer.clear();
 
         //saveQuantileCurvesFile("curvesOut", quantileCurvesOut);
 
-        std::cout << "evaluating interpolant PDF values..." << std::endl;
-        myTimer.start();
-        evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
-            quantileCurvesB, alpha, interpolatedPDFValues);
-        myTimer.stop();
-        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
-        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
-        myTimer.clear();
+            std::cout << "evaluating interpolant PDF values..." << std::endl;
+            myTimer.start();
+            evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
+                quantileCurvesB, kernelDensityC, quantileCurvesC,
+                kernelDensityD, quantileCurvesD, alpha, beta,
+                interpolatedPDFValues);
+            myTimer.stop();
+            std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+            std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+            myTimer.clear();
 
-        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i);
+            savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, 6 * i + j);
+        }
     }
 
     std::cout << "done." << std::endl;
     return 0;
 }
-
