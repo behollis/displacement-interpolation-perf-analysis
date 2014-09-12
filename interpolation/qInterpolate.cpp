@@ -13,8 +13,8 @@
 #include <cstdlib>
 #include <cmath>
 
-#define QUANTILE_Q 50
-#define DIV 100
+#define QUANTILE_Q 100
+#define DIV 200
 #define NUM_PTS 150
 
 void error(const std::string& message);
@@ -235,13 +235,6 @@ void interpolateQuantiles(const std::vector<std::vector<Vector2> >& qcurvesA,
 
             qcurvesOut[k][i].x = AB.x + beta * (CD.x - AB.x);
             qcurvesOut[k][i].y = AB.y + beta * (CD.y - AB.y);
-/*
-            qcurvesOut[k][i].x = qcurvesA[k][i].x;
-            qcurvesOut[k][i].y = qcurvesA[k][i].y;
-
-            qcurvesOut[k][i].x += alpha * (qcurvesB[k][i].x - qcurvesA[k][i].x);
-            qcurvesOut[k][i].y += alpha * (qcurvesB[k][i].y - qcurvesA[k][i].y);
-*/
         }
     }
 }
@@ -291,10 +284,6 @@ void evaluatePDFValues(DensityObject& dobjA,
 
             ipdf[k][i] = f0 * f1 * f2 * f3;
             ipdf[k][i] /= denominator;
-/*
-            ipdf[k][i] = valueA * valueB;
-            ipdf[k][i] /= (1.0 - alpha) * valueB + alpha * valueA;
-*/
         }
     }
 }
@@ -460,48 +449,227 @@ int main(int argc, char** argv) {
     saveQuantileCurvesFile("curvesD", quantileCurvesD);
 
     //
-    // interpolated distribution (currently just from two distributions)
+    // interpolated distributions
     //
 
-    unsigned alphaSteps = 6;
-    unsigned betaSteps = 6;
+    unsigned edgeSteps = 10;
+    unsigned totalInterpolationRealTime, totalInterpolationClockTime;
+    unsigned totalEvaluationRealTime, totalEvaluationClockTime;
+    double alpha, beta;
     std::vector<std::vector<Vector2> > quantileCurvesOut;
     std::vector<std::vector<double> > interpolatedPDFValues;
 
-    for (unsigned i = 0; i < alphaSteps; ++i) {
-        for (unsigned j = 0; j < betaSteps; ++j) {
-            double alpha = (double)i / (alphaSteps - 1);
-            double beta = (double)j / (betaSteps - 1);
+    // edge AB interpolation
 
-            std::cout << "--- alpha = " << alpha << ", beta = ";
-            std::cout << beta << " ---" << std::endl;
+    beta = 0.0;
+    totalInterpolationRealTime = totalInterpolationClockTime = 0;
+    totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    std::cout << "--- Edge AB ---" << std::endl;
+    for (unsigned i = 0; i < edgeSteps; ++i) {
+        alpha = (double)i / (edgeSteps - 1);
 
-            std::cout << "interpolating quantiles of distributions..." << std::endl;
-            myTimer.start();
-            interpolateQuantiles(quantileCurvesA, quantileCurvesB,
-                quantileCurvesC, quantileCurvesD, alpha, beta,
-                quantileCurvesOut);
-            myTimer.stop();
-            std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
-            std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
-            myTimer.clear();
+        std::cout << "--- alpha = " << alpha << ", beta = ";
+        std::cout << beta << " ---" << std::endl;
 
-        //saveQuantileCurvesFile("curvesOut", quantileCurvesOut);
+        std::cout << "interpolating quantiles of distributions..." << std::endl;
+        myTimer.start();
+        interpolateQuantiles(quantileCurvesA, quantileCurvesB,
+            quantileCurvesC, quantileCurvesD, alpha, beta,
+            quantileCurvesOut);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalInterpolationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalInterpolationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
 
-            std::cout << "evaluating interpolant PDF values..." << std::endl;
-            myTimer.start();
-            evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
-                quantileCurvesB, kernelDensityC, quantileCurvesC,
-                kernelDensityD, quantileCurvesD, alpha, beta,
-                interpolatedPDFValues);
-            myTimer.stop();
-            std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
-            std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
-            myTimer.clear();
+        std::cout << "evaluating interpolant PDF values..." << std::endl;
+        myTimer.start();
+        evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
+            quantileCurvesB, kernelDensityC, quantileCurvesC,
+            kernelDensityD, quantileCurvesD, alpha, beta,
+            interpolatedPDFValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalEvaluationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalEvaluationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
 
-            savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, 6 * i + j);
-        }
+        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 0 * edgeSteps);
     }
+    std::cout << "--- total times ---" << std::endl;
+    std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+    std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+    std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
+    std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+
+    // edge CD interpolation
+
+    beta = 1.0;
+    totalInterpolationRealTime = totalInterpolationClockTime = 0;
+    totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    std::cout << "--- Edge CD ---" << std::endl;
+    for (unsigned i = 0; i < edgeSteps; ++i) {
+        alpha = (double)i / (edgeSteps - 1);
+
+        std::cout << "--- alpha = " << alpha << ", beta = ";
+        std::cout << beta << " ---" << std::endl;
+
+        std::cout << "interpolating quantiles of distributions..." << std::endl;
+        myTimer.start();
+        interpolateQuantiles(quantileCurvesA, quantileCurvesB,
+            quantileCurvesC, quantileCurvesD, alpha, beta,
+            quantileCurvesOut);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalInterpolationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalInterpolationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        std::cout << "evaluating interpolant PDF values..." << std::endl;
+        myTimer.start();
+        evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
+            quantileCurvesB, kernelDensityC, quantileCurvesC,
+            kernelDensityD, quantileCurvesD, alpha, beta,
+            interpolatedPDFValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalEvaluationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalEvaluationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 1 * edgeSteps);
+    }
+    std::cout << "--- total times ---" << std::endl;
+    std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+    std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+    std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
+    std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+
+    // edge AC interpolation
+
+    alpha = 0.0;
+    totalInterpolationRealTime = totalInterpolationClockTime = 0;
+    totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    std::cout << "--- Edge AC ---" << std::endl;
+    for (unsigned i = 0; i < edgeSteps; ++i) {
+        beta = (double)i / (edgeSteps - 1);
+
+        std::cout << "--- alpha = " << alpha << ", beta = ";
+        std::cout << beta << " ---" << std::endl;
+
+        std::cout << "interpolating quantiles of distributions..." << std::endl;
+        myTimer.start();
+        interpolateQuantiles(quantileCurvesA, quantileCurvesB,
+            quantileCurvesC, quantileCurvesD, alpha, beta,
+            quantileCurvesOut);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalInterpolationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalInterpolationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        std::cout << "evaluating interpolant PDF values..." << std::endl;
+        myTimer.start();
+        evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
+            quantileCurvesB, kernelDensityC, quantileCurvesC,
+            kernelDensityD, quantileCurvesD, alpha, beta,
+            interpolatedPDFValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalEvaluationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalEvaluationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 2 * edgeSteps);
+    }
+    std::cout << "--- total times ---" << std::endl;
+    std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+    std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+    std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
+    std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+
+    // edge BD interpolation
+
+    alpha = 1.0;
+    totalInterpolationRealTime = totalInterpolationClockTime = 0;
+    totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    std::cout << "--- Edge BD ---" << std::endl;
+    for (unsigned i = 0; i < edgeSteps; ++i) {
+        beta = (double)i / (edgeSteps - 1);
+
+        std::cout << "--- alpha = " << alpha << ", beta = ";
+        std::cout << beta << " ---" << std::endl;
+
+        std::cout << "interpolating quantiles of distributions..." << std::endl;
+        myTimer.start();
+        interpolateQuantiles(quantileCurvesA, quantileCurvesB,
+            quantileCurvesC, quantileCurvesD, alpha, beta,
+            quantileCurvesOut);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalInterpolationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalInterpolationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        std::cout << "evaluating interpolant PDF values..." << std::endl;
+        myTimer.start();
+        evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
+            quantileCurvesB, kernelDensityC, quantileCurvesC,
+            kernelDensityD, quantileCurvesD, alpha, beta,
+            interpolatedPDFValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalEvaluationRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalEvaluationClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 3 * edgeSteps);
+    }
+    std::cout << "--- total times ---" << std::endl;
+    std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+    std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+    std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
+    std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+
+    // grid cell center interpolation
+
+    alpha = 0.5;
+    beta = 0.5;
+
+    std::cout << "--- grid cell center ---" << std::endl;
+    std::cout << "--- alpha = " << alpha << ", beta = ";
+    std::cout << beta << " ---" << std::endl;
+
+    std::cout << "interpolating quantiles of distributions..." << std::endl;
+    myTimer.start();
+    interpolateQuantiles(quantileCurvesA, quantileCurvesB,
+        quantileCurvesC, quantileCurvesD, alpha, beta,
+        quantileCurvesOut);
+    myTimer.stop();
+    std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+    myTimer.clear();
+
+    std::cout << "evaluating interpolant PDF values..." << std::endl;
+    myTimer.start();
+    evaluatePDFValues(kernelDensityA, quantileCurvesA, kernelDensityB,
+        quantileCurvesB, kernelDensityC, quantileCurvesC,
+        kernelDensityD, quantileCurvesD, alpha, beta,
+        interpolatedPDFValues);
+    myTimer.stop();
+    std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+    myTimer.clear();
+
+    savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, 0 + 4 * edgeSteps);
 
     std::cout << "done." << std::endl;
     return 0;

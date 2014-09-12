@@ -51,6 +51,7 @@ void createSampleGrid2D(double minX, double maxX,
 		std::vector<Vector<2,double> >& samplesPos) {
 
 	unsigned total = density * density;
+	samplesPos.clear();
 	samplesPos.resize(total);
 
 	double dx = (maxX - minX) / (density - 1);
@@ -189,23 +190,26 @@ void writeData2D(std::vector<double>& values,
 }
 
 int main(int argc, char** argv) {
-	if (argc < 3)
-		error("must provide two data files to interpolate");
+	if (argc < 5)
+		error("must provide four samples files to interpolate");
 
-	unsigned density = 50;
-	unsigned alphaSteps = 6;
+	unsigned density = 200;
+	unsigned edgeSteps = 10;
 
 	timekeeper myTimer;
+/*
 	unsigned pdfAConstructionRealTime, pdfBConstructionRealTime;
 	unsigned pdfAConstructionClockTime, pdfBConstructionClockTime;
 	unsigned precomputationRealTime, precomputationClockTime;
 	unsigned sumOfInterpolationRealTimes = 0;
 	unsigned sumOfInterpolationClockTimes = 0;
-
+*/
 	std::string filename = "interpolated";
-	if (argc > 3) filename = argv[3];
+	if (argc > 5) filename = argv[5];
 
 	Vector2 pos;
+
+	// distribution A kernel density estimate
 
 	std::vector<Vector2> vectorsA;
 	std::vector<Vector<2,double> > samplesPosA;
@@ -224,9 +228,14 @@ int main(int argc, char** argv) {
 		valuesA[i] = dobjA.evaluate(pos);
 	}
 	myTimer.stop();
-	pdfAConstructionRealTime = myTimer.getElapsedRealMS();
-	pdfAConstructionClockTime = myTimer.getElapsedClockMS();
+	//pdfAConstructionRealTime = myTimer.getElapsedRealMS();
+	//pdfAConstructionClockTime = myTimer.getElapsedClockMS();
+	std::cout << "PDF A construction:" << std::endl;
+	std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+	std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
 	myTimer.clear();
+
+	// distribution B kernel density estimate
 
 	std::vector<Vector2> vectorsB;
 	std::vector<Vector<2,double> > samplesPosB;
@@ -245,8 +254,63 @@ int main(int argc, char** argv) {
 		valuesB[i] = dobjB.evaluate(pos);
 	}
 	myTimer.stop();
-	pdfBConstructionRealTime = myTimer.getElapsedRealMS();
-	pdfBConstructionClockTime = myTimer.getElapsedClockMS();
+	//pdfBConstructionRealTime = myTimer.getElapsedRealMS();
+	//pdfBConstructionClockTime = myTimer.getElapsedClockMS();
+	std::cout << "PDF B construction:" << std::endl;
+	std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+	std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+	myTimer.clear();
+
+	// distribution C kernel density estimate
+
+	std::vector<Vector2> vectorsC;
+	std::vector<Vector<2,double> > samplesPosC;
+	std::vector<double> valuesC;
+
+	readSamplesFile(argv[3], vectorsC);
+	DensityObject dobjC(vectorsC);
+	createSampleGrid2D(dobjC.getMin().x, dobjC.getMax().x, dobjC.getMin().y,
+		dobjC.getMax().y, density, samplesPosC);
+
+	valuesC.resize(samplesPosC.size());
+	myTimer.start();
+	for (unsigned i = 0; i < samplesPosC.size(); ++i) {
+		pos.x = samplesPosC[i][0];
+		pos.y = samplesPosC[i][1];
+		valuesC[i] = dobjC.evaluate(pos);
+	}
+	myTimer.stop();
+	//pdfCConstructionRealTime = myTimer.getElapsedRealMS();
+	//pdfCConstructionClockTime = myTimer.getElapsedClockMS();
+	std::cout << "PDF C construction:" << std::endl;
+	std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+	std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+	myTimer.clear();
+
+	// distribution D kernel density estimate
+
+	std::vector<Vector2> vectorsD;
+	std::vector<Vector<2,double> > samplesPosD;
+	std::vector<double> valuesD;
+
+	readSamplesFile(argv[4], vectorsD);
+	DensityObject dobjD(vectorsD);
+	createSampleGrid2D(dobjD.getMin().x, dobjD.getMax().x, dobjD.getMin().y,
+		dobjD.getMax().y, density, samplesPosD);
+
+	valuesD.resize(samplesPosD.size());
+	myTimer.start();
+	for (unsigned i = 0; i < samplesPosD.size(); ++i) {
+		pos.x = samplesPosD[i][0];
+		pos.y = samplesPosD[i][1];
+		valuesD[i] = dobjD.evaluate(pos);
+	}
+	myTimer.stop();
+	//pdfBConstructionRealTime = myTimer.getElapsedRealMS();
+	//pdfBConstructionClockTime = myTimer.getElapsedClockMS();
+	std::cout << "PDF D construction:" << std::endl;
+	std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+	std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
 	myTimer.clear();
 /*
 	std::ifstream in_fileA(argv[1]);
@@ -325,7 +389,7 @@ int main(int argc, char** argv) {
 
 		readData2D(samplesPosA, valuesA, in_fileA);
 		readData2D(samplesPosB, valuesB, in_fileB);
-*/
+
 		Interpolator<2,double> interp(samplesPosA, valuesA,
 			samplesPosB, valuesB, sqrDistLinear, rbfFuncLinear,
 			interpolateBinsLinear, 2, 1);
@@ -337,7 +401,68 @@ int main(int argc, char** argv) {
 		precomputationRealTime = myTimer.getElapsedRealMS();
 		precomputationClockTime = myTimer.getElapsedClockMS();
 		myTimer.clear();
+*/
 
+		// edge AB precomputation
+
+		Interpolator<2,double> edgeAB(samplesPosA, valuesA,
+			samplesPosB, valuesB, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeAB.precompute();
+
+		myTimer.stop();
+		std::cout << "edge AB precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
+		// edge CD precomputation
+
+		Interpolator<2,double> edgeCD(samplesPosC, valuesC,
+			samplesPosD, valuesD, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeCD.precompute();
+
+		myTimer.stop();
+		std::cout << "edge CD precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
+		// edge AC precomputation
+
+		Interpolator<2,double> edgeAC(samplesPosA, valuesA,
+			samplesPosC, valuesC, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeAC.precompute();
+
+		myTimer.stop();
+		std::cout << "edge AC precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
+		// edge BD precomputation
+
+		Interpolator<2,double> edgeBD(samplesPosB, valuesB,
+			samplesPosD, valuesD, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeBD.precompute();
+
+		myTimer.stop();
+		std::cout << "edge BD precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+/*
 		double minX = min(samplesPosA[0][0], samplesPosB[0][0]);
 		double maxX = max(samplesPosA[samplesPosA.size() - 1][0],
 			samplesPosB[samplesPosB.size() - 1][0]);
@@ -345,31 +470,187 @@ int main(int argc, char** argv) {
 		double minY = min(samplesPosA[0][1], samplesPosB[0][1]);
 		double maxY = max(samplesPosA[samplesPosA.size() - 1][1],
 			samplesPosB[samplesPosB.size() - 1][1]);
+*/
+
+		double minX = min( min(dobjA.getMin().x, dobjB.getMin().x),
+			min(dobjC.getMin().x, dobjD.getMin().x) );
+		double maxX = max( max(dobjA.getMax().x, dobjB.getMax().x),
+			max(dobjC.getMax().x, dobjD.getMax().x) );
+		double minY = min( min(dobjA.getMin().y, dobjB.getMin().y),
+			min(dobjC.getMin().y, dobjD.getMin().y) );
+		double maxY = max( max(dobjA.getMax().y, dobjB.getMax().y),
+			max(dobjC.getMax().y, dobjD.getMax().y) );
+		double alpha;
+
+		unsigned totalInterpolationRealTime, totalInterpolationClockTime;
 
 		std::vector<Vector<2,double> > samplesPosOut;
 		std::vector<double> valuesOut;
 		createSampleGrid2D(minX, maxX, minY, maxY,
 			density, samplesPosOut);
 
-		for (int i = 0; i < alphaSteps; ++i) {
-			double alpha = (double)i / (alphaSteps - 1);
+		// edge AB interpolation
+
+		totalInterpolationRealTime = totalInterpolationClockTime = 0;
+		std::cout << "Edge AB interpolation:" << std::endl;
+		for (int i = 0; i < edgeSteps; ++i) {
+			alpha = (double)i / (edgeSteps - 1);
+			std::cout << " -alpha = " << alpha << std::endl;
 
 			myTimer.start();
-			interp.interpolate(alpha, samplesPosOut, valuesOut);
+			edgeAB.interpolate(alpha, samplesPosOut, valuesOut);
 
 			myTimer.stop();
-			sumOfInterpolationRealTimes += myTimer.getElapsedRealMS();
-			sumOfInterpolationClockTimes += myTimer.getElapsedClockMS();
+			std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+			totalInterpolationRealTime += myTimer.getElapsedRealMS();
+			std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+			totalInterpolationClockTime += myTimer.getElapsedClockMS();
 			myTimer.clear();
 
 			writeData2D(valuesOut, minX, maxX, minY, maxY,
-				filename, i);
+				filename, i + 0 * edgeSteps);
 		}
+		std::cout << "--- total times ---" << std::endl;
+		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+
+		// edge CD interpolation
+
+		totalInterpolationRealTime = totalInterpolationClockTime = 0;
+		std::cout << "Edge CD interpolation:" << std::endl;
+		for (int i = 0; i < edgeSteps; ++i) {
+			alpha = (double)i / (edgeSteps - 1);
+			std::cout << " -alpha = " << alpha << std::endl;
+
+			myTimer.start();
+			edgeCD.interpolate(alpha, samplesPosOut, valuesOut);
+
+			myTimer.stop();
+			std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+			totalInterpolationRealTime += myTimer.getElapsedRealMS();
+			std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+			totalInterpolationClockTime += myTimer.getElapsedClockMS();
+			myTimer.clear();
+
+			writeData2D(valuesOut, minX, maxX, minY, maxY,
+				filename, i + 1 * edgeSteps);
+		}
+		std::cout << "--- total times ---" << std::endl;
+		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+
+		// edge AC interpolation
+
+		totalInterpolationRealTime = totalInterpolationClockTime = 0;
+		std::cout << "Edge AC interpolation:" << std::endl;
+		for (int i = 0; i < edgeSteps; ++i) {
+			alpha = (double)i / (edgeSteps - 1);
+			std::cout << " -alpha = " << alpha << std::endl;
+
+			myTimer.start();
+			edgeAC.interpolate(alpha, samplesPosOut, valuesOut);
+
+			myTimer.stop();
+			std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+			totalInterpolationRealTime += myTimer.getElapsedRealMS();
+			std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+			totalInterpolationClockTime += myTimer.getElapsedClockMS();
+			myTimer.clear();
+
+			writeData2D(valuesOut, minX, maxX, minY, maxY,
+				filename, i + 2 * edgeSteps);
+		}
+		std::cout << "--- total times ---" << std::endl;
+		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+
+		// edge BD interpolation
+
+		totalInterpolationRealTime = totalInterpolationClockTime = 0;
+		std::cout << "Edge BD interpolation:" << std::endl;
+		for (int i = 0; i < edgeSteps; ++i) {
+			alpha = (double)i / (edgeSteps - 1);
+			std::cout << " -alpha = " << alpha << std::endl;
+
+			myTimer.start();
+			edgeBD.interpolate(alpha, samplesPosOut, valuesOut);
+
+			myTimer.stop();
+			std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+			totalInterpolationRealTime += myTimer.getElapsedRealMS();
+			std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+			totalInterpolationClockTime += myTimer.getElapsedClockMS();
+			myTimer.clear();
+
+			writeData2D(valuesOut, minX, maxX, minY, maxY,
+				filename, i + 3 * edgeSteps);
+		}
+		std::cout << "--- total times ---" << std::endl;
+		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
+		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+
+		// grid cell center interpolation
+
+		std::cout << "grid cell center interpolation:" << std::endl;
+		alpha = 0.5;
+
+		std::cout << " -edge AB interpolation: " << std::endl;
+		std::vector<Vector<2,double> > samplesPosAB;
+		std::vector<double> valuesAB;
+		createSampleGrid2D(minX, maxX, minY, maxY,
+			density, samplesPosAB);
+
+		myTimer.start();
+		edgeAB.interpolate(alpha, samplesPosAB, valuesAB);
+
+		myTimer.stop();
+		std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
+		std::cout << " -edge CD interpolation: " << std::endl;
+		std::vector<Vector<2,double> > samplesPosCD;
+		std::vector<double> valuesCD;
+		createSampleGrid2D(minX, maxX, minY, maxY,
+			density, samplesPosCD);
+
+		myTimer.start();
+		edgeCD.interpolate(alpha, samplesPosCD, valuesCD);
+
+		myTimer.stop();
+		std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
+		std::cout << " -spanning edge precomputation: " << std::endl;
+		Interpolator<2,double> edgeSpan(samplesPosAB, valuesAB,
+			samplesPosCD, valuesCD, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeSpan.precompute();
+
+		myTimer.stop();
+		std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
+		std::cout << " -spanning edge interpolation: " << std::endl;
+		myTimer.start();
+		edgeSpan.interpolate(alpha, samplesPosOut, valuesOut);
+
+		myTimer.stop();
+		std::cout << "   -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << "   -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
+		writeData2D(valuesOut, minX, maxX, minY, maxY,
+			filename, 0 + 4 * edgeSteps);
 	/*}
 
 	in_fileA.close();
 	in_fileB.close();
-*/
+
 	FILE* timingRecord = fopen("timing", "a");
 	fprintf(timingRecord, "entry start\n");
 	fprintf(timingRecord, "PDF A construction (ms): %u\n", pdfAConstructionRealTime);
@@ -383,6 +664,6 @@ int main(int argc, char** argv) {
 	fprintf(timingRecord, "interpolation count: %d\n", alphaSteps);
 	fprintf(timingRecord, "\n");
 	fclose(timingRecord);
-
+*/
 	return 0;
 }
