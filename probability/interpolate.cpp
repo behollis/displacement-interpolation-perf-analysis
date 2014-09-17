@@ -193,7 +193,7 @@ int main(int argc, char** argv) {
 	if (argc < 5)
 		error("must provide four samples files to interpolate");
 
-	unsigned density = 200;
+	unsigned density = 140;
 	unsigned edgeSteps = 10;
 
 	timekeeper myTimer;
@@ -403,75 +403,6 @@ int main(int argc, char** argv) {
 		myTimer.clear();
 */
 
-		// edge AB precomputation
-
-		Interpolator<2,double> edgeAB(samplesPosA, valuesA,
-			samplesPosB, valuesB, sqrDistLinear, rbfFuncLinear,
-			interpolateBinsLinear, 2, 1);
-
-		myTimer.start();
-		edgeAB.precompute();
-
-		myTimer.stop();
-		std::cout << "edge AB precomputation:" << std::endl;
-		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
-		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
-		myTimer.clear();
-
-		// edge CD precomputation
-
-		Interpolator<2,double> edgeCD(samplesPosC, valuesC,
-			samplesPosD, valuesD, sqrDistLinear, rbfFuncLinear,
-			interpolateBinsLinear, 2, 1);
-
-		myTimer.start();
-		edgeCD.precompute();
-
-		myTimer.stop();
-		std::cout << "edge CD precomputation:" << std::endl;
-		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
-		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
-		myTimer.clear();
-
-		// edge AC precomputation
-
-		Interpolator<2,double> edgeAC(samplesPosA, valuesA,
-			samplesPosC, valuesC, sqrDistLinear, rbfFuncLinear,
-			interpolateBinsLinear, 2, 1);
-
-		myTimer.start();
-		edgeAC.precompute();
-
-		myTimer.stop();
-		std::cout << "edge AC precomputation:" << std::endl;
-		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
-		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
-		myTimer.clear();
-
-		// edge BD precomputation
-
-		Interpolator<2,double> edgeBD(samplesPosB, valuesB,
-			samplesPosD, valuesD, sqrDistLinear, rbfFuncLinear,
-			interpolateBinsLinear, 2, 1);
-
-		myTimer.start();
-		edgeBD.precompute();
-
-		myTimer.stop();
-		std::cout << "edge BD precomputation:" << std::endl;
-		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
-		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
-		myTimer.clear();
-/*
-		double minX = min(samplesPosA[0][0], samplesPosB[0][0]);
-		double maxX = max(samplesPosA[samplesPosA.size() - 1][0],
-			samplesPosB[samplesPosB.size() - 1][0]);
-
-		double minY = min(samplesPosA[0][1], samplesPosB[0][1]);
-		double maxY = max(samplesPosA[samplesPosA.size() - 1][1],
-			samplesPosB[samplesPosB.size() - 1][1]);
-*/
-
 		double minX = min( min(dobjA.getMin().x, dobjB.getMin().x),
 			min(dobjC.getMin().x, dobjD.getMin().x) );
 		double maxX = max( max(dobjA.getMax().x, dobjB.getMax().x),
@@ -488,6 +419,21 @@ int main(int argc, char** argv) {
 		std::vector<double> valuesOut;
 		createSampleGrid2D(minX, maxX, minY, maxY,
 			density, samplesPosOut);
+
+		// edge AB precomputation
+
+		Interpolator<2,double> edgeAB(samplesPosA, valuesA,
+			samplesPosB, valuesB, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeAB.precompute();
+
+		myTimer.stop();
+		std::cout << "edge AB precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
 
 		// edge AB interpolation
 
@@ -514,6 +460,21 @@ int main(int argc, char** argv) {
 		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
 		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
 
+		// edge CD precomputation
+
+		Interpolator<2,double> edgeCD(samplesPosC, valuesC,
+			samplesPosD, valuesD, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeCD.precompute();
+
+		myTimer.stop();
+		std::cout << "edge CD precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
 		// edge CD interpolation
 
 		totalInterpolationRealTime = totalInterpolationClockTime = 0;
@@ -538,6 +499,21 @@ int main(int argc, char** argv) {
 		std::cout << "--- total times ---" << std::endl;
 		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
 		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+
+		// edge AC precomputation
+
+		Interpolator<2,double> edgeAC(samplesPosA, valuesA,
+			samplesPosC, valuesC, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeAC.precompute();
+
+		myTimer.stop();
+		std::cout << "edge AC precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
 
 		// edge AC interpolation
 
@@ -564,6 +540,21 @@ int main(int argc, char** argv) {
 		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
 		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
 
+		// edge BD precomputation
+
+		Interpolator<2,double> edgeBD(samplesPosB, valuesB,
+			samplesPosD, valuesD, sqrDistLinear, rbfFuncLinear,
+			interpolateBinsLinear, 2, 1);
+
+		myTimer.start();
+		edgeBD.precompute();
+
+		myTimer.stop();
+		std::cout << "edge BD precomputation:" << std::endl;
+		std::cout << " -real: " << myTimer.getElapsedRealMS() << std::endl;
+		std::cout << " -clock: " << myTimer.getElapsedClockMS() << std::endl;
+		myTimer.clear();
+
 		// edge BD interpolation
 
 		totalInterpolationRealTime = totalInterpolationClockTime = 0;
@@ -588,6 +579,16 @@ int main(int argc, char** argv) {
 		std::cout << "--- total times ---" << std::endl;
 		std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
 		std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
+
+/*
+		double minX = min(samplesPosA[0][0], samplesPosB[0][0]);
+		double maxX = max(samplesPosA[samplesPosA.size() - 1][0],
+			samplesPosB[samplesPosB.size() - 1][0]);
+
+		double minY = min(samplesPosA[0][1], samplesPosB[0][1]);
+		double maxY = max(samplesPosA[samplesPosA.size() - 1][1],
+			samplesPosB[samplesPosB.size() - 1][1]);
+*/
 
 		// grid cell center interpolation
 
