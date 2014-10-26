@@ -17,6 +17,14 @@
 #define DIV 200
 #define NUM_PTS 150
 
+#ifdef __cplusplus
+extern "C" {
+    void dgelsd_(int* M, int* N, int* NRHS, double* A, int* LDA,
+        double* B, int* LDB, double* S, double* RCOND, int* RANK,
+        double* WORK, int* LWORK, int* IWORK, int* INFO);
+}
+#endif
+
 void error(const std::string& message);
 
 //
@@ -24,41 +32,81 @@ void error(const std::string& message);
 //
 
 class CurveObject {
-    std::vector<Vector2> positions;
-    std::vector<double> distances;
-    double totalDistance;
+    std::vector<double> xPositions, yPositions;
+    const std::list<Vector2>& positionList;
+    double minX, maxX;
+    double coefficients[4];
 
 public:
-    CurveObject() {
-        totalDistance = 0;
-    }
+    CurveObject(const std::list<Vector2>& points): positionList(points),
+            xPositions(points.size(), 0.0), yPositions(points.size(), 0.0) {
 
-    void addPoint(const Vector2& position) {
-        positions.push_back(position);
+        unsigned index;
 
-        if (positions.size() > 1) {
-            Vector2 toRecentPoint;
-            toRecentPoint.x = positions[positions.size() - 1].x -
-                positions[positions.size() - 2].x;
-            toRecentPoint.y = positions[positions.size() - 1].y -
-                positions[positions.size() - 2].y;
+        std::list<Vector2>::const_iterator iter = positionList.begin();
+        minX = maxX = (*iter).x;
 
-            double recentDistance = sqrt(toRecentPoint.x * toRecentPoint.x +
-                toRecentPoint.y * toRecentPoint.y);
+        for (index = 0; iter != positionList.end(); ++iter, index++) {
+            const Vector2& v = *iter;
 
-            distances.push_back(recentDistance);
-            totalDistance += recentDistance;
+            if (v.x < minX) minX = v.x;
+            if (v.x > maxX) maxX = v.x;
+
+            xPositions[index] = v.x;
+            yPositions[index] = v.y;
         }
+
+        std::vector<double> A(xPositions.size() * 4);
+        std::vector<double> y = yPositions;
+
+        for (unsigned i = 0; i < y.size(); i++) A[i] = 1.0;
+        for (unsigned j = 1; j < 4; j++) {
+            for (unsigned i = 0; i < y.size(); i++)
+                A[j * y.size() + i] = A[(j-1) * y.size() + i] * xPositions[i];
+        }
+
+        double rcond = -1.0;
+        int m = y.size();
+        int n = 4;
+        int n_rhs = 1;
+
+        int info = 0, rank = 0;
+
+        int maxMN = (m > n) ? m : n;
+        int minMN = (m < n) ? m : n;
+
+        int ldb = maxMN;
+        std::vector<double> s(minMN, 0.0);
+
+        int nlvl = (int)log(0.5 * (double)minMN) + 1;
+        if (nlvl < 0) nlvl = 0;
+
+        std::vector<int> iwork(3 * minMN * nlvl + 11 * minMN, 0);
+
+        int lwork = -1;
+        std::vector<double> work(1, 0.0);
+
+        dgelsd_(&m, &n, &n_rhs, &A[0], &m, &y[0], &ldb, &s[0], &rcond,
+            &rank, &work[0], &lwork, &iwork[0], &info);
+
+        lwork = (int)(work[0]);
+        work.clear();
+        work.resize(lwork, 0.0);
+
+        dgelsd_(&m, &n, &n_rhs, &A[0], &m, &y[0], &ldb, &s[0], &rcond,
+            &rank, &work[0], &lwork, &iwork[0], &info);
+
+        coefficients[0] = y[0];
+        coefficients[1] = y[1];
+        coefficients[2] = y[2];
+        coefficients[3] = y[3];
     }
 
     void getPoints(unsigned pointCount, std::vector<Vector2>& points) {
-        unsigned current = 0;
-        double differentialDistance = totalDistance / pointCount;
-        double currentDistance = 0;
-        double pointDistances = 0;
+        double xDifferential = (maxX - minX) / (pointCount - 1);
 
         points.clear();
-        if (positions.size() < 2) {
+        if (positionList.size() < 2) {
             std::cout << "unable to form a quantile curve" << std::endl;
             return;
         }
@@ -66,28 +114,13 @@ public:
         points.resize(pointCount);
 
         for (unsigned i = 0; i < pointCount; ++i) {
-            Vector2& currentPosition = positions[current];
-            Vector2& nextPosition = positions[current + 1];
+            points[i].x = minX + i * xDifferential;
 
-            double alpha = (currentDistance - pointDistances) / distances[current];
-            points[i].x = currentPosition.x + alpha *
-                (nextPosition.x - currentPosition.x);
-            points[i].y = currentPosition.y + alpha *
-                (nextPosition.y - currentPosition.y);
-
-            currentDistance += differentialDistance;
-            while (currentDistance - pointDistances > distances[current]) {
-                pointDistances += distances[current];
-                current += 1;
-                if (current > positions.size() - 2) current = positions.size() - 2;
-            }
+            points[i].y  = coefficients[3] * points[i].x * points[i].x * points[i].x;
+            points[i].y += coefficients[2] * points[i].x * points[i].x;
+            points[i].y += coefficients[1] * points[i].x;
+            points[i].y += coefficients[0];
         }
-    }
-
-    void clear() {
-        positions.clear();
-        distances.clear();
-        totalDistance = 0;
     }
 };
 
@@ -184,18 +217,16 @@ void parameterizeQuantiles(const std::vector<std::list<Vector2> >& qpts,
     qcurves.resize(quantiles.size());
 
     for (unsigned k = 0; k < quantiles.size(); ++k) {
-        CurveObject cobj;
         qcurves[k] = std::vector<Vector2>();
 
-        std::list<Vector2>::const_iterator iter;
-        for (iter = qpts[k].begin(); iter != qpts[k].end(); ++iter) {
-            const Vector2& v = *iter;
-
-            cobj.addPoint(v);
+        if (qpts[k].size() < 1) {
+            std::cerr << "unable to form a quantile curve" << std::endl;
+            continue;
         }
 
+        CurveObject cobj(qpts[k]);
+
         cobj.getPoints(NUM_PTS, qcurves[k]);
-        cobj.clear();
     }
 }
 
