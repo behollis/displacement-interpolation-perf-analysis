@@ -1,5 +1,9 @@
+#include "interp.h"
 #include "timekeeper.h"
 #include "DensityObject.h"
+
+#include "Vector2.h"
+#include "error.h"
 
 #include <iostream>
 #include <fstream>
@@ -14,7 +18,7 @@
 #include <cmath>
 
 #define QUANTILE_Q 100
-#define DIV 200
+#define DIV 140
 #define NUM_PTS 150
 
 #ifdef __cplusplus
@@ -25,7 +29,7 @@ extern "C" {
 }
 #endif
 
-void error(const std::string& message);
+//void error(const std::string& message);
 
 //
 // curve interpolation class (linear)
@@ -155,7 +159,7 @@ void saveQuantileCurvesFile(const std::string& filename,
     }
     curvesFile.close();
 }
-
+/*
 void savePDFFile(const std::string& filename,
         const std::vector<std::vector<Vector2> >& qcurves,
         const std::vector<std::vector<double> >& ipdf, unsigned step) {
@@ -176,6 +180,55 @@ void savePDFFile(const std::string& filename,
         }
     }
     outputFile.close();
+}
+*/
+
+void writeData(std::vector<double>& values,
+        double minX, double maxX, double minY, double maxY,
+        const std::string& filename, int step) {
+
+    std::ostringstream s;
+    s << filename << step;
+
+    std::ofstream out_file(s.str().c_str());
+
+    out_file << "2" << std::endl;
+    out_file << minX << " " << maxX << std::endl;
+    out_file << minY << " " << maxY << std::endl;
+
+    unsigned N = (unsigned)sqrt( (double)values.size() );
+
+    for (unsigned i = 0; i < N; i++) {
+        for (unsigned j = 0; j < N; j++) {
+            if (j != 0) out_file << " ";
+
+            out_file << values[i*N + j];
+        }
+        if (i != N - 1) out_file << std::endl;
+    }
+
+    out_file.close();
+}
+
+void createSampleGrid(double minX, double maxX,
+        double minY, double maxY,
+        unsigned density,
+        std::vector<Vector2>& samplesPos) {
+
+    unsigned total = density * density;
+    samplesPos.clear();
+    samplesPos.resize(total);
+
+    double dx = (maxX - minX) / (density - 1);
+    double dy = (maxY - minY) / (density - 1);
+
+    for (unsigned i = 0; i < total; ++i) {
+        unsigned iX = i / density;
+        unsigned iY = i % density;
+
+        samplesPos[i].x = minX + iX * dx;
+        samplesPos[i].y = minY + iY * dy;
+    }
 }
 
 //
@@ -317,6 +370,43 @@ void evaluatePDFValues(DensityObject& dobjA,
             ipdf[k][i] /= denominator;
         }
     }
+}
+
+void reconstructPDFSurface(std::vector<std::vector<Vector2> >& qcurves,
+        std::vector<std::vector<double> >& ipdf,
+        std::vector<Vector2>& outPositions,
+        std::vector<double>& outValues) {
+
+    if (qcurves.size() != ipdf.size())
+        error("unable to construct surface, unequal amount of points and values");
+
+    std::vector<Vector2> qcurvesUnravel;
+    std::vector<double> ipdfUnravel;
+
+    unsigned qcurvesUnravelSize = 0, ipdfUnravelSize = 0;
+
+    for (unsigned i = 0; i < qcurves.size(); i++) {
+        qcurvesUnravelSize += qcurves[i].size();
+        ipdfUnravelSize += ipdf[i].size();
+    }
+
+    if (qcurvesUnravelSize != ipdfUnravelSize)
+        error("unable to contruct surface, unequal amount of points and values");
+
+    qcurvesUnravel.resize(qcurvesUnravelSize);
+    ipdfUnravel.resize(ipdfUnravelSize);
+    unsigned index = 0;
+
+    for (unsigned i = 0; i < qcurves.size(); i++) {
+        for (unsigned j = 0; j < qcurves[i].size(); j++) {
+            qcurvesUnravel[index] = qcurves[i][j];
+            ipdfUnravel[index] = ipdf[i][j];
+            index++;
+        }
+    }
+
+    LinearNDInterpolator interp(qcurvesUnravel, ipdfUnravel, 0.0);
+    interp._do_evaluate(outPositions, outValues);
 }
 
 int main(int argc, char** argv) {
@@ -483,9 +573,24 @@ int main(int argc, char** argv) {
     // interpolated distributions
     //
 
+    double minX = std::min( std::min(kernelDensityA.getMin().x, kernelDensityB.getMin().x),
+        std::min(kernelDensityC.getMin().x, kernelDensityD.getMin().x) );
+    double maxX = std::max( std::max(kernelDensityA.getMax().x, kernelDensityB.getMax().x),
+        std::max(kernelDensityC.getMax().x, kernelDensityD.getMax().x) );
+
+    double minY = std::min( std::min(kernelDensityA.getMin().y, kernelDensityB.getMin().y),
+        std::min(kernelDensityC.getMin().y, kernelDensityD.getMin().y) );
+    double maxY = std::max( std::max(kernelDensityA.getMax().y, kernelDensityB.getMax().y),
+        std::max(kernelDensityC.getMax().y, kernelDensityD.getMax().y) );
+
+    std::vector<Vector2> outPositions;
+    std::vector<double> outValues;
+    createSampleGrid(minX, maxX, minY, maxY, DIV, outPositions);
+
     unsigned edgeSteps = 10;
     unsigned totalInterpolationRealTime, totalInterpolationClockTime;
     unsigned totalEvaluationRealTime, totalEvaluationClockTime;
+    unsigned totalReconstructionRealTime, totalReconstructionClockTime;
     double alpha, beta;
     std::vector<std::vector<Vector2> > quantileCurvesOut;
     std::vector<std::vector<double> > interpolatedPDFValues;
@@ -495,6 +600,8 @@ int main(int argc, char** argv) {
     beta = 0.0;
     totalInterpolationRealTime = totalInterpolationClockTime = 0;
     totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    totalReconstructionRealTime = totalReconstructionClockTime = 0;
+
     std::cout << "--- Edge AB ---" << std::endl;
     for (unsigned i = 0; i < edgeSteps; ++i) {
         alpha = (double)i / (edgeSteps - 1);
@@ -527,19 +634,36 @@ int main(int argc, char** argv) {
         totalEvaluationClockTime += myTimer.getElapsedClockMS();
         myTimer.clear();
 
-        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 0 * edgeSteps);
+        std::cout << "reconstructing PDF surface..." << std::endl;
+        myTimer.start();
+        reconstructPDFSurface(quantileCurvesOut, interpolatedPDFValues,
+            outPositions, outValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalReconstructionRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalReconstructionClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        //savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 0 * edgeSteps);
+        writeData(outValues, minX, maxX, minY, maxY, outputFile, i + 0 * edgeSteps);
     }
+
     std::cout << "--- total times ---" << std::endl;
     std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
     std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
     std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
     std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+    std::cout << "total reconstruction in real ms: " << totalReconstructionRealTime << std::endl;
+    std::cout << "total reconstruction in clock ms: " << totalReconstructionClockTime << std::endl;
 
     // edge CD interpolation
 
     beta = 1.0;
     totalInterpolationRealTime = totalInterpolationClockTime = 0;
     totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    totalReconstructionRealTime = totalReconstructionClockTime = 0;
+
     std::cout << "--- Edge CD ---" << std::endl;
     for (unsigned i = 0; i < edgeSteps; ++i) {
         alpha = (double)i / (edgeSteps - 1);
@@ -572,19 +696,35 @@ int main(int argc, char** argv) {
         totalEvaluationClockTime += myTimer.getElapsedClockMS();
         myTimer.clear();
 
-        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 1 * edgeSteps);
+        std::cout << "reconstructing PDF surface..." << std::endl;
+        myTimer.start();
+        reconstructPDFSurface(quantileCurvesOut, interpolatedPDFValues,
+            outPositions, outValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalReconstructionRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalReconstructionClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        //savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 1 * edgeSteps);
+        writeData(outValues, minX, maxX, minY, maxY, outputFile, i + 1 * edgeSteps);
     }
     std::cout << "--- total times ---" << std::endl;
     std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
     std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
     std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
     std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+    std::cout << "total reconstruction in real ms: " << totalReconstructionRealTime << std::endl;
+    std::cout << "total reconstruction in clock ms: " << totalReconstructionClockTime << std::endl;
 
     // edge AC interpolation
 
     alpha = 0.0;
     totalInterpolationRealTime = totalInterpolationClockTime = 0;
     totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    totalReconstructionRealTime = totalReconstructionClockTime = 0;
+
     std::cout << "--- Edge AC ---" << std::endl;
     for (unsigned i = 0; i < edgeSteps; ++i) {
         beta = (double)i / (edgeSteps - 1);
@@ -617,19 +757,35 @@ int main(int argc, char** argv) {
         totalEvaluationClockTime += myTimer.getElapsedClockMS();
         myTimer.clear();
 
-        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 2 * edgeSteps);
+        std::cout << "reconstructing PDF surface..." << std::endl;
+        myTimer.start();
+        reconstructPDFSurface(quantileCurvesOut, interpolatedPDFValues,
+            outPositions, outValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalReconstructionRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalReconstructionClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        //savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 2 * edgeSteps);
+        writeData(outValues, minX, maxX, minY, maxY, outputFile, i + 2 * edgeSteps);
     }
     std::cout << "--- total times ---" << std::endl;
     std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
     std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
     std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
     std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+    std::cout << "total reconstruction in real ms: " << totalReconstructionRealTime << std::endl;
+    std::cout << "total reconstruction in clock ms: " << totalReconstructionClockTime << std::endl;
 
     // edge BD interpolation
 
     alpha = 1.0;
     totalInterpolationRealTime = totalInterpolationClockTime = 0;
     totalEvaluationRealTime = totalEvaluationClockTime = 0;
+    totalReconstructionRealTime = totalReconstructionClockTime = 0;
+
     std::cout << "--- Edge BD ---" << std::endl;
     for (unsigned i = 0; i < edgeSteps; ++i) {
         beta = (double)i / (edgeSteps - 1);
@@ -662,13 +818,27 @@ int main(int argc, char** argv) {
         totalEvaluationClockTime += myTimer.getElapsedClockMS();
         myTimer.clear();
 
-        savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 3 * edgeSteps);
+        std::cout << "reconstructing PDF surface..." << std::endl;
+        myTimer.start();
+        reconstructPDFSurface(quantileCurvesOut, interpolatedPDFValues,
+            outPositions, outValues);
+        myTimer.stop();
+        std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+        totalReconstructionRealTime += myTimer.getElapsedRealMS();
+        std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+        totalReconstructionClockTime += myTimer.getElapsedClockMS();
+        myTimer.clear();
+
+        //savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, i + 3 * edgeSteps);
+        writeData(outValues, minX, maxX, minY, maxY, outputFile, i + 3 * edgeSteps);
     }
     std::cout << "--- total times ---" << std::endl;
     std::cout << "total interpolation in real ms: " << totalInterpolationRealTime << std::endl;
     std::cout << "total interpolation in clock ms: " << totalInterpolationClockTime << std::endl;
     std::cout << "total evaluation in real ms: " << totalEvaluationRealTime << std::endl;
     std::cout << "total evaluation in clock ms: " << totalEvaluationClockTime << std::endl;
+    std::cout << "total reconstruction in real ms: " << totalReconstructionRealTime << std::endl;
+    std::cout << "total reconstruction in clock ms: " << totalReconstructionClockTime << std::endl;
 
     // grid cell center interpolation
 
@@ -700,7 +870,17 @@ int main(int argc, char** argv) {
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
     myTimer.clear();
 
-    savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, 0 + 4 * edgeSteps);
+    std::cout << "reconstructing PDF surface..." << std::endl;
+    myTimer.start();
+    reconstructPDFSurface(quantileCurvesOut, interpolatedPDFValues,
+        outPositions, outValues);
+    myTimer.stop();
+    std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
+    std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
+    myTimer.clear();
+
+    //savePDFFile(outputFile, quantileCurvesOut, interpolatedPDFValues, 0 + 4 * edgeSteps);
+    writeData(outValues, minX, maxX, minY, maxY, outputFile, 0 + 4 * edgeSteps);
 
     std::cout << "done." << std::endl;
     return 0;

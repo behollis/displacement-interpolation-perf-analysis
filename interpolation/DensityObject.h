@@ -11,9 +11,8 @@
 #include <cmath>
 #include <cstdlib>
 
-struct Vector2 {
-    double x, y;
-};
+#include "Vector2.h"
+#include "error.h"
 
 #ifdef __cplusplus // import copyrighted mvnun fortran subroutine
 extern "C" {
@@ -22,12 +21,12 @@ extern "C" {
         double* abseps, double* releps, double* value, int* inform);
 }
 #endif
-
+/*
 void error(const std::string& message) {
     std::cerr << "Error: " << message << std::endl;
     exit(1);
 }
-
+*/
 void split(const std::string& line, char delim,
         std::vector<std::string>& elems) {
 
