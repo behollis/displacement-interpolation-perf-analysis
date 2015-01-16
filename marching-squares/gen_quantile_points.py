@@ -5,12 +5,19 @@
 # Takes an input CDF+quantile file and
 # emits the corresponding quantile points
 #
-# Expected input format:
+# Input format:
 # width height
 # quantiles0, quantile1, quantile2, ...
 # val_0_0, val_1_0, val_2_0, val_3_0, ...
 # val_0_1, val_1_1, val_2_1, val_3_1, ...
 # ...
+#
+# Output Format:
+# p1.x p1.y p2.x p2.y p3.x p3.y ...
+# p1.x p1.y p2.x p2.y p3.x p3.y ...
+# p1.x p1.y p2.x p2.y p3.x p3.y ...
+# ...
+#
 #
 
 import sys
@@ -123,7 +130,7 @@ for quantile in quantiles:
         isocurves = merge_lines(isolines, 0.0)
         quantile_points.append(isocurves[0])
     else:
-        print 'none'
+        quantile_points.append([])
 
 for point_set in quantile_points:
     print ' '.join([str(p[0]) + " " + str(p[1]) for p in point_set])

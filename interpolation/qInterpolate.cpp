@@ -17,8 +17,8 @@
 #include <cstdlib>
 #include <cmath>
 
-#define QUANTILE_Q 100
-#define DIV 140
+#define QUANTILE_Q 25
+#define DIV 50
 #define NUM_PTS 150
 
 #ifdef __cplusplus
@@ -232,6 +232,79 @@ void createSampleGrid(double minX, double maxX,
 }
 
 //
+// For marching squares
+//
+
+void exportCDF(DensityObject& dobj,
+        const std::vector<double>& quantiles,
+        const std::string& out_filepath) {
+
+    const double TOL = 0.5 / QUANTILE_Q;
+    const double differentialU = (dobj.getMax().x - dobj.getMin().x) / (DIV - 1);
+    const double differentialV = (dobj.getMax().y - dobj.getMin().y) / (DIV - 1);
+
+    std::ofstream out_file(out_filepath.c_str());
+    // write dimensions
+    out_file << DIV << " " << DIV << std::endl;
+    // write quantiles
+    for (unsigned k = 0; k < quantiles.size(); ++k) {
+        if (k != 0) {
+            out_file << " ";
+        }
+        out_file << quantiles[k];
+    }
+    out_file << std::endl;
+
+    for (unsigned i = 0; i < DIV; ++i) {
+        for (unsigned j = 0; j < DIV; ++j) {
+            Vector2 uv_coord;
+            uv_coord.x = dobj.getMin().x + i * differentialU;
+            uv_coord.y = dobj.getMin().y + j * differentialV;
+
+            double d = dobj.integrate_box(dobj.getMin(), uv_coord);
+            if (j != 0) {
+                out_file << " ";
+            }
+            out_file << d;
+        }
+        out_file << std::endl;
+    }
+}
+
+// This only works if the number of quantiles and resolution is the
+// same between the input file and qInterpolate
+// In other words, DIV and QUANNTILE_Q must not have changed since
+// the CDF was exported
+void importQuantilePoints(DensityObject& dobj,
+    const std::string& in_filepath,
+    std::vector<std::list<Vector2> >& quantilePoints) {
+
+    const double differentialU = (dobj.getMax().x - dobj.getMin().x) / (DIV - 1);
+    const double differentialV = (dobj.getMax().y - dobj.getMin().y) / (DIV - 1);
+
+    std::ifstream in_file(in_filepath.c_str());
+    std::string line;
+    unsigned i = 0;
+    while (std::getline(in_file, line)) {
+        if (line.length() > 0) {
+            std::istringstream linestream(line);
+
+            double x, y;
+            while (linestream >> x >> y) {
+
+                Vector2 uv_coord;
+                uv_coord.x = dobj.getMin().x + x * differentialU;
+                uv_coord.y = dobj.getMin().y + y * differentialV;
+
+                quantilePoints[i].push_back(uv_coord);
+            }
+        }
+        i++;
+    }
+
+}
+
+//
 // algorithms from paper
 //
 
@@ -439,7 +512,9 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution A..." << std::endl;
     myTimer.start();
-    calculateCDF(kernelDensityA, quantilesA, quantilePointsA);
+    //calculateCDF(kernelDensityA, quantilesA, quantilePointsA);
+    importQuantilePoints(kernelDensityA, "../marching-squares/quantilePointsA", quantilePointsA);
+    exportCDF(kernelDensityA, quantilesA, "cdfA");
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
@@ -477,7 +552,9 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution B..." << std::endl;
     myTimer.start();
-    calculateCDF(kernelDensityB, quantilesB, quantilePointsB);
+    //calculateCDF(kernelDensityB, quantilesB, quantilePointsB);
+    importQuantilePoints(kernelDensityB, "../marching-squares/quantilePointsB", quantilePointsB);
+    exportCDF(kernelDensityB, quantilesB, "cdfB");
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
@@ -515,7 +592,9 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution C..." << std::endl;
     myTimer.start();
-    calculateCDF(kernelDensityC, quantilesC, quantilePointsC);
+    //calculateCDF(kernelDensityC, quantilesC, quantilePointsC);
+    importQuantilePoints(kernelDensityC, "../marching-squares/quantilePointsC", quantilePointsC);
+    exportCDF(kernelDensityC, quantilesC, "cdfC");
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
@@ -553,7 +632,9 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution D..." << std::endl;
     myTimer.start();
-    calculateCDF(kernelDensityD, quantilesD, quantilePointsD);
+    //calculateCDF(kernelDensityD, quantilesD, quantilePointsD);
+    importQuantilePoints(kernelDensityD, "../marching-squares/quantilePointsD", quantilePointsD);
+    exportCDF(kernelDensityD, quantilesD, "cdfD");
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
