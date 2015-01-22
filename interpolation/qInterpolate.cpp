@@ -369,8 +369,8 @@ void calculateCDF(DensityObject& dobj,
                 vtkIdType pointID = cell->GetPointId(point_idx);
                 double *point =  polyData->GetPoint(pointID);
                 Vector2 coord;
-                coord.x = point[0];
-                coord.y = point[1];
+                coord.x = dobj.getMin().x + point[0] * differentialU;
+                coord.y = dobj.getMin().y + point[1] * differentialV;;
                 pointSet.insert(coord);
             }
         }
