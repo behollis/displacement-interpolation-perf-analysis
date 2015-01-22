@@ -9,8 +9,15 @@
 #include <fstream>
 #include <vector>
 #include <list>
+#include <set>
 #include <string>
 #include <sstream>
+
+// VTK
+#include <vtkCell.h>
+#include <vtkSmartPointer.h>
+#include <vtkMarchingSquares.h>
+#include <vtkImageCanvasSource2D.h>
 
 #define _USE_MATH_DEFINES
 
@@ -316,6 +323,12 @@ void calculateCDF(DensityObject& dobj,
     const double differentialU = (dobj.getMax().x - dobj.getMin().x) / (DIV - 1);
     const double differentialV = (dobj.getMax().y - dobj.getMin().y) / (DIV - 1);
 
+    // Set up VTK Image Source using CDF
+    vtkSmartPointer<vtkImageCanvasSource2D> canvas = vtkImageCanvasSource2D::New();
+    canvas->SetNumberOfScalarComponents(1);
+    canvas->SetExtent(0, DIV - 1, 0, DIV - 1, 0, 0);
+    canvas->FillBox(0, DIV, 0, DIV);
+
     for (unsigned i = 0; i < DIV; ++i) {
         for (unsigned j = 0; j < DIV; ++j) {
             Vector2 uv_coord;
@@ -324,14 +337,47 @@ void calculateCDF(DensityObject& dobj,
 
             double d = dobj.integrate_box(dobj.getMin(), uv_coord);
 
-            for (unsigned k = 0; k < quantiles.size(); ++k) {
-                double q = quantiles[k];
+            canvas->SetDrawColor(d);
+            canvas->DrawPoint(i, j);
+        }
+    }
+    
+    canvas->Update();
 
-                if ((q - TOL < d) && (q + TOL > d)) {
-                    quantilePoints[k].push_back(uv_coord);
-                }
+    // Set up VTK Marching Squares
+    vtkSmartPointer<vtkMarchingSquares> marchingSquares = vtkMarchingSquares::New();
+    marchingSquares->SetInputConnection(canvas->GetOutputPort());
+    marchingSquares->SetImageRange(0, DIV, 0, DIV, 0, 0);
+    marchingSquares->CreateDefaultLocator();
+
+    // Run Marching Squares for each quantile
+    std::vector<double>::const_iterator qiter;
+    for (unsigned k = 0; k < quantiles.size(); ++k) {
+        double quantile = quantiles[k];
+        marchingSquares->GenerateValues(1, quantile, quantile);
+        marchingSquares->Update();
+        vtkSmartPointer<vtkPolyData> polyData = marchingSquares->GetOutput();
+
+        std::set<Vector2> pointSet;
+        vtkIdType cell_idx, point_idx;
+
+        // Insert points from isolines into a set to remove duplicates
+        for (cell_idx = 0; cell_idx < polyData->GetNumberOfCells(); ++cell_idx) {
+            vtkSmartPointer<vtkCell> cell = polyData->GetCell(cell_idx);
+
+            for (point_idx = 0; point_idx < cell->GetNumberOfPoints(); ++point_idx) {
+                vtkIdType pointID = cell->GetPointId(point_idx);
+                double *point =  polyData->GetPoint(pointID);
+                Vector2 coord;
+                coord.x = point[0];
+                coord.y = point[1];
+                pointSet.insert(coord);
             }
         }
+
+        // Append isoline points to quantile point list
+        std::list<Vector2> &pointList = quantilePoints[k];
+        pointList.insert(pointList.begin(), pointSet.begin(), pointSet.end());
     }
 }
 
@@ -512,9 +558,7 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution A..." << std::endl;
     myTimer.start();
-    //calculateCDF(kernelDensityA, quantilesA, quantilePointsA);
-    importQuantilePoints(kernelDensityA, "../marching-squares/quantilePointsA", quantilePointsA);
-    exportCDF(kernelDensityA, quantilesA, "cdfA");
+    calculateCDF(kernelDensityA, quantilesA, quantilePointsA);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
@@ -552,9 +596,7 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution B..." << std::endl;
     myTimer.start();
-    //calculateCDF(kernelDensityB, quantilesB, quantilePointsB);
-    importQuantilePoints(kernelDensityB, "../marching-squares/quantilePointsB", quantilePointsB);
-    exportCDF(kernelDensityB, quantilesB, "cdfB");
+    calculateCDF(kernelDensityB, quantilesB, quantilePointsB);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
@@ -592,9 +634,7 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution C..." << std::endl;
     myTimer.start();
-    //calculateCDF(kernelDensityC, quantilesC, quantilePointsC);
-    importQuantilePoints(kernelDensityC, "../marching-squares/quantilePointsC", quantilePointsC);
-    exportCDF(kernelDensityC, quantilesC, "cdfC");
+    calculateCDF(kernelDensityC, quantilesC, quantilePointsC);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;
@@ -632,9 +672,7 @@ int main(int argc, char** argv) {
 
     std::cout << "calculating CDF of distribution D..." << std::endl;
     myTimer.start();
-    //calculateCDF(kernelDensityD, quantilesD, quantilePointsD);
-    importQuantilePoints(kernelDensityD, "../marching-squares/quantilePointsD", quantilePointsD);
-    exportCDF(kernelDensityD, quantilesD, "cdfD");
+    calculateCDF(kernelDensityD, quantilesD, quantilePointsD);
     myTimer.stop();
     std::cout << " -time: " << myTimer.getElapsedRealMS() << std::endl;
     std::cout << " -CPU clock: " << myTimer.getElapsedClockMS() << std::endl;

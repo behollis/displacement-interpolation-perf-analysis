@@ -3,6 +3,10 @@
 
 struct Vector2 {
     double x, y;
+    // for equality
+    bool operator<(const Vector2& that) const {
+        return x != that.x && y != that.y;
+    }
 };
 
 #endif
