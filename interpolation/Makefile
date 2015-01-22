@@ -16,7 +16,7 @@ LIBS = ./libqhull/*.o ./liblapack/*.o\
        -lvtksys-6.1 \
        -ldl
 
-COMPILE = g++ -I/home/vagrant/libvtk/include/vtk-6.1
+COMPILE = g++ -I./libvtk/include/vtk-6.1
 
 all: static
 
